@@ -1,0 +1,8 @@
+node_modules
+dist
+*.local
+*.tsbuildinfo
+.vite
+
+# Rendered demo videos are large deliverables — share them separately
+demo/
