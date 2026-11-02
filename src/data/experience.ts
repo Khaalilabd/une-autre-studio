@@ -19,4 +19,10 @@ export const CHAPTERS: Record<ConceptId, { title: string[]; tagline: string; tin
   vinyle: { title: ['Vinyle.'], tagline: 'Le nom tourne, la nuit aussi.', tint: ['#2a0b0b', '#050303'], rim: '#ff2a1f' },
   echo: { title: ['Écho.'], tagline: 'Ce qui résonne après.', tint: ['#250808', '#050303'], rim: '#ff2d2d' },
   sticker: { title: ['Sticker.'], tagline: 'À coller partout.', tint: ['#2a0a0a', '#060303'], rim: '#ff1f1f' },
+  glossy: { title: ['Glossy.'], tagline: 'Le signe, en trois dimensions.', tint: ['#4a0a10', '#120204'], rim: '#ff5a5f' },
+  clubnight: { title: ['Club.'], tagline: 'Sous les lumières de la salle.', tint: ['#3a0b0b', '#0b0202'], rim: '#ffd9a8' },
+  gourmand: { title: ['Gourmand.'], tagline: 'Sucré, solaire, à croquer.', tint: ['#5a1a06', '#1a0502'], rim: '#ffb21a' },
+  sunset: { title: ['Sunset.'], tagline: 'Quand le soleil touche la mer.', tint: ['#3a1e36', '#0d0610'], rim: '#ff8a3d' },
+  horizon: { title: ['Horizon.'], tagline: 'Une fenêtre sur la même mer.', tint: ['#3a1a0a', '#0d0603'], rim: '#ffb36b' },
+  chrome: { title: ['Chrome.'], tagline: 'Ça brille, et ça se voit.', tint: ['#202430', '#050506'], rim: '#dfe6ff' },
 };

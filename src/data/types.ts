@@ -17,7 +17,13 @@ export type ConceptId =
   | 'loco'
   | 'vinyle'
   | 'echo'
-  | 'sticker';
+  | 'sticker'
+  | 'glossy'
+  | 'clubnight'
+  | 'gourmand'
+  | 'sunset'
+  | 'horizon'
+  | 'chrome';
 
 export interface LineupSlot {
   id: string;
