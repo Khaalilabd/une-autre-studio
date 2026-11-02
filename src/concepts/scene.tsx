@@ -1,27 +1,33 @@
 /**
- * Directions 18–23 — "real-world" club posters: full-bleed atmospheric image,
- * centred hierarchy (title → date / venue → LINE UP → practical line).
- * Every image is generated (gradients, blur, glossy shading), no photo needed.
+ * Directions 18–23 — club posters that work like the real ones (one strong
+ * object filling the frame, centred hierarchy, huge line-up) but whose object
+ * belongs to UNE AUTRE ? and to Tunisia. Everything is generated in SVG.
  */
 import { useMemo, type FC, type ReactNode } from 'react';
-import { lines, splitBrand, splitDate } from '../data/content';
+import { lines, splitBrand } from '../data/content';
 import type { Colors, ConceptDef, CreativeSettings, EventContent, LogoProps, PosterProps, Tone } from '../data/types';
 import { hexToRgb, useUid } from '../graphics/common';
 import { Photo } from '../graphics/Photo';
 import { Artboard } from '../graphics/posterKit';
+import { catmull, outline } from '../lib/brush';
 import { FONT } from '../lib/fonts';
+import { Q_POINTS, questionField } from '../lib/generators';
 import { fitMeasured, measure } from '../lib/measure';
+import type { Pt } from '../lib/pathSample';
 import { f1, rng } from '../lib/rng';
 import { QUESTION_GLYPH } from '../lib/strokeFont';
 
-/* ---------- colour helpers ---------- */
+/* ======================================================================= */
+/* helpers                                                                 */
+/* ======================================================================= */
+
 const toHex = (r: number, g: number, b: number) => '#' + [r, g, b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
 export function mix(a: string, b: string, t: number) {
   const A = hexToRgb(a);
   const B = hexToRgb(b);
   return toHex(A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t);
 }
-/** Base hue of the image, driven by the creative controls (background + accent). */
+/** Base hue driven by the creative controls (background + accent). */
 const baseHue = (c: Colors, s: CreativeSettings) => (c.background === 'paper' ? mix(s.accent, '#ffffff', 0.35) : c.background === 'dark' ? mix(s.accent, '#000000', 0.55) : s.accent);
 
 const MONTHS: Record<string, string> = { janvier: '01', fevrier: '02', février: '02', mars: '03', avril: '04', mai: '05', juin: '06', juillet: '07', aout: '08', août: '08', septembre: '09', octobre: '10', novembre: '11', decembre: '12', décembre: '12' };
@@ -31,221 +37,38 @@ function shortDate(date: string) {
   const mm = m && MONTHS[m[2].toLowerCase()];
   return m && mm ? `${m[1].padStart(2, '0')}.${mm}` : date;
 }
-/** "RAYHANE" + "B2B KARIM SIALA" → "RAYHANE B2B KARIM SIALA" (club-poster habit). */
 const joinB2B = (a: { name: string; detail: string }) => (/^b2b/i.test(a.detail) ? `${a.name} ${a.detail}` : a.name);
 
-/* ---------- glossy tubes ---------- */
-function Tube({ d, transform, color, sw, blur = 0 }: { d: string; transform?: string; color: string; sw: number; blur?: number }) {
-  const id = useUid('tube');
-  const layers = (
-    <g transform={transform} fill="none" strokeLinecap="round" strokeLinejoin="round">
-      <path d={d} stroke={mix(color, '#000000', 0.55)} strokeWidth={sw} />
-      <path d={d} stroke={color} strokeWidth={sw * 0.78} transform={`translate(${-sw * 0.06} ${-sw * 0.06})`} />
-      <path d={d} stroke={mix(color, '#ffffff', 0.45)} strokeWidth={sw * 0.34} transform={`translate(${-sw * 0.16} ${-sw * 0.18})`} opacity={0.85} />
-      <path d={d} stroke="#ffffff" strokeWidth={sw * 0.09} transform={`translate(${-sw * 0.22} ${-sw * 0.24})`} opacity={0.8} />
-    </g>
-  );
-  if (!blur) return layers;
-  return (
-    <g filter={`url(#${id})`}>
-      <defs>
-        <filter id={id} x="-30%" y="-30%" width="160%" height="160%">
-          <feGaussianBlur stdDeviation={blur} />
-        </filter>
-      </defs>
-      {layers}
-    </g>
-  );
-}
-
-/** The "?" as a glossy tube (Trajet skeleton). Box: h tall, centred on (cx, cy). */
-function GlossyQ({ cx, cy, h, color, blur = 0, rot = 0 }: { cx: number; cy: number; h: number; color: string; blur?: number; rot?: number }) {
+/** Points along the "?" skeleton, centred on (cx, cy), glyph height h, roughly every `step` px. */
+function qPoints(cx: number, cy: number, h: number, step: number): Pt[] {
   const s = h / 100;
-  return <Tube d={QUESTION_GLYPH.d} transform={`translate(${f1(cx)} ${f1(cy)}) rotate(${rot}) scale(${f1(s * 100) / 100}) translate(-28 -50)`} color={color} sw={15} blur={blur / s} />;
+  const out: Pt[] = [];
+  let last: Pt | null = null;
+  for (const [x, y] of Q_POINTS) {
+    const p: Pt = [cx + (x - 28) * s, cy + (y - 50) * s];
+    if (!last || Math.hypot(p[0] - last[0], p[1] - last[1]) >= step) {
+      out.push(p);
+      last = p;
+    }
+  }
+  return out;
 }
 
-function Blobs({ w, h, colors, seed = 3, blur = 90 }: { w: number; h: number; colors: string[]; seed?: number; blur?: number }) {
-  const id = useUid('blob');
-  const r = rng(seed);
-  const items = Array.from({ length: 7 }, (_, i) => ({ x: r() * w, y: r() * h, rx: 200 + r() * 380, ry: 140 + r() * 300, c: colors[i % colors.length], o: 0.5 + r() * 0.5 }));
+function Blur({ sd, children }: { sd: number; children: ReactNode }) {
+  const id = useUid('bl');
   return (
     <g filter={`url(#${id})`}>
       <defs>
         <filter id={id} x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation={blur} />
+          <feGaussianBlur stdDeviation={sd} />
         </filter>
       </defs>
-      {items.map((b, i) => (
-        <ellipse key={i} cx={b.x} cy={b.y} rx={b.rx} ry={b.ry} fill={b.c} opacity={b.o} />
-      ))}
+      {children}
     </g>
   );
 }
 
-/* ---------- sunset scene ---------- */
-function SunsetScene({ w, h, horizon, seed = 4, terrace = true, hue }: { w: number; h: number; horizon: number; seed?: number; terrace?: boolean; hue: string }) {
-  const id = useUid('sun');
-  const r = rng(seed);
-  const glints = useMemo(() => {
-    const rr = rng(seed + 9);
-    return Array.from({ length: 260 }, () => {
-      const y = horizon + 4 + Math.pow(rr(), 1.6) * (h - horizon);
-      const spread = 60 + (y - horizon) * 0.9;
-      const x = w / 2 + (rr() - 0.5) * spread * (rr() < 0.7 ? 1 : 3.2);
-      return { x, y, l: 6 + rr() * (14 + (y - horizon) * 0.08), o: 0.35 + rr() * 0.6 };
-    });
-  }, [w, h, horizon, seed]);
-  const sky = [mix(hue, '#1d1236', 0.7), mix(hue, '#a3405f', 0.45), mix(hue, '#ff7a36', 0.25), '#ffd38a'];
-  return (
-    <g>
-      <defs>
-        <linearGradient id={id + 's'} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor={sky[0]} />
-          <stop offset="0.55" stopColor={sky[1]} />
-          <stop offset="0.88" stopColor={sky[2]} />
-          <stop offset="1" stopColor={sky[3]} />
-        </linearGradient>
-        <linearGradient id={id + 'w'} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor={mix(sky[2], '#000000', 0.25)} />
-          <stop offset="1" stopColor={mix(sky[0], '#000000', 0.55)} />
-        </linearGradient>
-        <radialGradient id={id + 'g'} cx="0.5" cy={horizon / h} r="0.5">
-          <stop offset="0" stopColor="#fff2c8" stopOpacity="0.95" />
-          <stop offset="0.12" stopColor="#ffb25e" stopOpacity="0.6" />
-          <stop offset="1" stopColor="#ff6a3d" stopOpacity="0" />
-        </radialGradient>
-        <filter id={id + 'c'} x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.0025 0.018" numOctaves={4} seed={seed} />
-          <feColorMatrix type="matrix" values={`0 0 0 0 1 0 0 0 0 0.62 0 0 0 0 0.55 2.2 0 0 0 -1.05`} />
-        </filter>
-        <clipPath id={id + 'k'}>
-          <rect width={w} height={horizon} />
-        </clipPath>
-      </defs>
-      <rect width={w} height={horizon} fill={`url(#${id}s)`} />
-      <g clipPath={`url(#${id}k)`}>
-        <rect y={horizon * 0.25} width={w} height={horizon * 0.72} filter={`url(#${id}c)`} opacity={0.75} />
-      </g>
-      <rect width={w} height={h} fill={`url(#${id}g)`} />
-      <circle cx={w / 2} cy={horizon - 6} r={34} fill="#fff4d6" opacity={0.95} />
-      <rect y={horizon} width={w} height={h - horizon} fill={`url(#${id}w)`} />
-      <g stroke="#ffc27a" strokeLinecap="round">
-        {glints.map((g, i) => (
-          <line key={i} x1={g.x - g.l / 2} x2={g.x + g.l / 2} y1={g.y} y2={g.y} strokeWidth={1 + (g.y - horizon) / 220} opacity={g.o} />
-        ))}
-      </g>
-      {terrace && (
-        <g fill="#0d0708">
-          <path d={`M${w * 0.58} ${h}L${w * 0.62} ${horizon + 120}L${w * 0.78} ${horizon + 70}L${w} ${horizon + 30}V${h}Z`} />
-          <rect x={w * 0.6} y={horizon + 86} width={w * 0.4} height={12} />
-          {Array.from({ length: 40 }, (_, i) => {
-            const x = w * 0.61 + i * (w * 0.0098) + r() * 4;
-            const s = 4 + r() * 3;
-            return <path key={i} d={`M${f1(x)} ${horizon + 86}v-${f1(s * 2.2)}a${s} ${s} 0 1 1 ${f1(s * 0.01)} 0Z`} />;
-          })}
-        </g>
-      )}
-    </g>
-  );
-}
-
-/* ---------- club ceiling ---------- */
-function ClubScene({ w, h, hue, seed = 6 }: { w: number; h: number; hue: string; seed?: number }) {
-  const id = useUid('club');
-  const data = useMemo(() => {
-    const r = rng(seed);
-    const rows = Array.from({ length: 9 }, (_, k) => {
-      const t = k / 8;
-      const y = 40 + Math.pow(t, 1.5) * h * 0.36;
-      const n = Math.round(46 - t * 24);
-      const spread = w * (1.5 - t * 0.7);
-      return Array.from({ length: n }, (_, i) => ({ x: w / 2 + (i / (n - 1) - 0.5) * spread, y: y + (r() - 0.5) * 3, s: 2.6 - t * 1.4 }));
-    }).flat();
-    const heads = Array.from({ length: 60 }, () => ({ x: r() * w, y: h * (0.83 + r() * 0.12), s: 18 + r() * 22, arm: r() < 0.2 }));
-    return { rows, heads };
-  }, [w, h, seed]);
-  return (
-    <g>
-      <defs>
-        <radialGradient id={id + 'h'} cx="0.5" cy="0.45" r="0.75">
-          <stop offset="0" stopColor={mix(hue, '#ff9a5a', 0.25)} stopOpacity="0.85" />
-          <stop offset="0.55" stopColor={mix(hue, '#000000', 0.45)} stopOpacity="0.9" />
-          <stop offset="1" stopColor="#090202" />
-        </radialGradient>
-        <filter id={id + 'b'} x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="5" />
-        </filter>
-      </defs>
-      <rect width={w} height={h} fill={`url(#${id}h)`} />
-      <g filter={`url(#${id}b)`} fill="#ffd9a8">
-        {data.rows.map((b, i) => (
-          <circle key={i} cx={b.x} cy={b.y} r={b.s * 3} opacity={0.5} />
-        ))}
-      </g>
-      <g fill="#fff4e0">
-        {data.rows.map((b, i) => (
-          <circle key={i} cx={b.x} cy={b.y} r={b.s} />
-        ))}
-      </g>
-      <g fill="#070101">
-        {data.heads.map((p, i) => (
-          <g key={i}>
-            <circle cx={p.x} cy={p.y} r={p.s * 0.5} />
-            <rect x={p.x - p.s} y={p.y + p.s * 0.45} width={p.s * 2} height={h} rx={p.s * 0.6} />
-            {p.arm && <path d={`M${p.x + p.s * 0.7} ${p.y + p.s}L${p.x + p.s * 1.3} ${p.y - p.s * 1.8}`} stroke="#070101" strokeWidth={p.s * 0.35} strokeLinecap="round" />}
-          </g>
-        ))}
-      </g>
-    </g>
-  );
-}
-
-/* ---------- glossy sugar ring ---------- */
-function SugarRing({ cx, cy, R, sw, hue }: { cx: number; cy: number; R: number; sw: number; hue: string }) {
-  const id = useUid('ring');
-  const sugar = useMemo(() => {
-    const r = rng(12);
-    return Array.from({ length: 520 }, () => {
-      const a = r() * Math.PI * 2;
-      const rr = R + (r() - 0.5) * sw * 0.9;
-      const up = Math.sin(a) < 0 ? 1 : 0.35;
-      return { x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr, s: 1 + r() * 4.5, o: (0.3 + r() * 0.7) * up };
-    });
-  }, [cx, cy, R, sw]);
-  const outer = R + sw / 2;
-  return (
-    <g>
-      <defs>
-        <radialGradient id={id + 't'} cx={cx} cy={cy} r={outer} gradientUnits="userSpaceOnUse">
-          <stop offset={(R - sw / 2) / outer} stopColor={mix(hue, '#000000', 0.6)} />
-          <stop offset={(R - sw * 0.1) / outer} stopColor={mix(hue, '#ffffff', 0.15)} />
-          <stop offset={(R + sw * 0.18) / outer} stopColor={hue} />
-          <stop offset="1" stopColor={mix(hue, '#000000', 0.55)} />
-        </radialGradient>
-        <filter id={id + 'b'} x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="10" />
-        </filter>
-      </defs>
-      <circle cx={cx + 14} cy={cy + 40} r={R} fill="none" stroke="#000" strokeOpacity={0.35} strokeWidth={sw} filter={`url(#${id}b)`} />
-      <circle cx={cx} cy={cy} r={R} fill="none" stroke={`url(#${id}t)`} strokeWidth={sw} />
-      <g fill="#fff6ef">
-        {sugar.map((p, i) => (
-          <rect key={i} x={p.x} y={p.y} width={p.s} height={p.s} opacity={p.o} transform={`rotate(${(i * 37) % 90} ${p.x} ${p.y})`} />
-        ))}
-      </g>
-      <path d={`M${cx - R * 0.95} ${cy - R * 0.35}A${R} ${R} 0 0 1 ${cx - R * 0.2} ${cy - R * 0.98}`} fill="none" stroke="#ffffff" strokeWidth={sw * 0.12} strokeLinecap="round" opacity={0.75} filter={`url(#${id}b)`} />
-    </g>
-  );
-}
-
-function Sparkle({ x, y, s, color = '#ffffff' }: { x: number; y: number; s: number; color?: string }) {
-  return <path d={`M${x} ${y - s}Q${x} ${y} ${x + s} ${y}Q${x} ${y} ${x} ${y + s}Q${x} ${y} ${x - s} ${y}Q${x} ${y} ${x} ${y - s}Z`} fill={color} />;
-}
-
-/* ======================================================================= */
-/* Wordmark-based logo factory                                             */
-/* ======================================================================= */
-
+/* ---------- wordmark logo factory ---------- */
 interface WordStyle {
   family: string;
   css: string;
@@ -253,16 +76,11 @@ interface WordStyle {
   italic?: boolean;
   lower?: boolean;
   tracking: number;
-  /** Optional per-text paint (chrome gradient, puffy stroke…). */
-  paint?: (fill: string, accent: string, id: string, size: number) => { defs?: ReactNode; props: Record<string, unknown> };
   Symbol: FC<{ tone: Tone }>;
 }
 
 function makeLogo(st: WordStyle): FC<LogoProps> {
   return function WordLogo({ variant, brand, tone, layout = 'stacked', x, y, width, height }: LogoProps) {
-    const id = useUid('wl');
-    const { words, question, base } = splitBrand(brand);
-    const tx = (s: string) => (st.lower ? s.toLowerCase() : s.toUpperCase());
     if (variant === 'symbol') {
       return (
         <svg viewBox="0 0 300 300" x={x} y={y} width={width ?? 300} height={height ?? 300}>
@@ -270,31 +88,24 @@ function makeLogo(st: WordStyle): FC<LogoProps> {
         </svg>
       );
     }
-    const size = variant === 'secondary' ? 70 : 140;
-    const font = { family: st.family, size, weight: st.weight, italic: st.italic, tracking: size * st.tracking };
-    const q = question ? ' ?' : '';
-    const rows = variant === 'primary' && layout !== 'line' && words.length > 1 ? [tx(words[0]), tx(words.slice(1).join(' ')) + q] : [tx(base) + q];
-    const w = Math.max(...rows.map((r) => measure(r, font))) + size * 0.5;
-    const h = rows.length * size * 1.02 + size * 0.45;
-    const paint = st.paint?.(tone.fg, tone.accent, id, size);
+    const d = wordDims(st, brand, variant === 'secondary' ? 'line' : layout, variant === 'secondary' ? 70 : 140);
     return (
-      <svg viewBox={`0 0 ${f1(w)} ${f1(h)}`} x={x} y={y} width={width ?? w} height={height ?? h}>
-        {paint?.defs}
-        {rows.map((r, i) => (
+      <svg viewBox={`0 0 ${f1(d.w)} ${f1(d.h)}`} x={x} y={y} width={width ?? d.w} height={height ?? d.h}>
+        {d.rows.map((r, i) => (
           <text
             key={i}
-            x={w / 2}
-            y={size * 0.98 + i * size * 1.02}
+            x={d.w / 2}
+            y={d.size * 0.98 + i * d.size * 1.04}
             textAnchor="middle"
             fontFamily={st.css}
             fontWeight={st.weight}
             fontStyle={st.italic ? 'italic' : undefined}
-            fontSize={size}
-            letterSpacing={size * st.tracking}
+            fontSize={d.size}
+            letterSpacing={d.size * st.tracking}
             fill={tone.fg}
-            {...paint?.props}
           >
-            {r}
+            {r.replace(/ \?$/, '')}
+            {/ \?$/.test(r) && <tspan fill={tone.accent}> ?</tspan>}
           </text>
         ))}
       </svg>
@@ -302,25 +113,21 @@ function makeLogo(st: WordStyle): FC<LogoProps> {
   };
 }
 
-function wordDims(st: WordStyle, brand: string, layout: 'stacked' | 'line') {
+function wordDims(st: WordStyle, brand: string, layout: 'stacked' | 'line', size = 140) {
   const { words, question, base } = splitBrand(brand);
   const tx = (s: string) => (st.lower ? s.toLowerCase() : s.toUpperCase());
-  const size = 140;
   const font = { family: st.family, size, weight: st.weight, italic: st.italic, tracking: size * st.tracking };
   const q = question ? ' ?' : '';
   const rows = layout !== 'line' && words.length > 1 ? [tx(words[0]), tx(words.slice(1).join(' ')) + q] : [tx(base) + q];
-  return { w: Math.max(...rows.map((r) => measure(r, font))) + size * 0.5, h: rows.length * size * 1.02 + size * 0.45 };
+  return { rows, size, w: Math.max(...rows.map((r) => measure(r, font))) + size * 0.5, h: rows.length * size * 1.04 + size * 0.42 };
 }
 
-/* ======================================================================= */
-/* Shared poster pieces                                                    */
-/* ======================================================================= */
-
-function Title({ st, content, settings, colors, cx, y, maxW, maxH }: { st: WordStyle; content: EventContent; settings: CreativeSettings; colors: Colors; cx: number; y: number; maxW: number; maxH: number }) {
+/** Title block honouring the "title layout" + "logo size" controls. */
+function Title({ st, content, settings, colors, cx, y, maxW, maxH, fg = '#ffffff' }: { st: WordStyle; content: EventContent; settings: CreativeSettings; colors: Colors; cx: number; y: number; maxW: number; maxH: number; fg?: string }) {
   const Logo = useMemo(() => makeLogo(st), [st]);
-  const tone: Tone = { fg: '#ffffff', accent: colors.accent };
+  const tone: Tone = { fg, accent: colors.accent === colors.ink ? fg : colors.accent };
   if (settings.titleLayout === 'symbol') {
-    const s = maxH * 1.25 * settings.logoScale;
+    const s = maxH * 1.15 * settings.logoScale;
     return <Logo variant="symbol" brand={content.brand} tone={tone} x={cx - s / 2} y={y} width={s} height={s} />;
   }
   const lay = settings.titleLayout === 'line' ? 'line' : 'stacked';
@@ -329,53 +136,22 @@ function Title({ st, content, settings, colors, cx, y, maxW, maxH }: { st: WordS
   return <Logo variant="primary" layout={lay} brand={content.brand} tone={tone} x={cx - (d.w * k) / 2} y={y} width={d.w * k} height={d.h * k} />;
 }
 
-function Lineup({
-  content,
-  cx,
-  y,
-  maxW,
-  size,
-  family,
-  css,
-  weight,
-  color = '#ffffff',
-  gap = 1.02,
-  sep,
-  italic,
-}: {
-  content: EventContent;
-  cx: number;
-  y: number;
-  maxW: number;
-  size: number;
-  family: string;
-  css: string;
-  weight: number;
-  color?: string;
-  gap?: number;
-  sep?: string;
-  italic?: boolean;
-}) {
-  if (sep) {
-    const names = content.lineup.map((a) => a.name);
-    const half = Math.ceil(names.length / 2);
-    const rows = names.length > 2 ? [names.slice(0, half).join(sep), names.slice(half).join(sep)] : [names.join(sep)];
+/** Club-poster line-up: centred, huge, one name per line (or one row joined by a separator). */
+function Lineup({ content, cx, y, maxW, size, family, css, weight, color = '#ffffff', italic, oneRow }: { content: EventContent; cx: number; y: number; maxW: number; size: number; family: string; css: string; weight: number; color?: string; italic?: boolean; oneRow?: string }) {
+  if (oneRow) {
+    const t = content.lineup.map((a) => a.name).join(oneRow);
     return (
-      <g textAnchor="middle" fontFamily={css} fontWeight={weight} fill={color} fontStyle={italic ? 'italic' : undefined}>
-        {rows.map((r, i) => (
-          <text key={i} x={cx} y={y + i * size * 1.2} fontSize={fitMeasured(r, maxW, { family, size, weight })}>
-            {r}
-          </text>
-        ))}
-      </g>
+      <text x={cx} y={y} textAnchor="middle" fontFamily={css} fontWeight={weight} fontStyle={italic ? 'italic' : undefined} fill={color} fontSize={fitMeasured(t, maxW, { family, size, weight, italic })}>
+        {t}
+      </text>
     );
   }
   return (
-    <g textAnchor="middle" fontFamily={css} fontWeight={weight} fill={color}>
+    <g textAnchor="middle" fontFamily={css} fontWeight={weight} fontStyle={italic ? 'italic' : undefined} fill={color}>
       {content.lineup.map((a, i) => {
         const t = joinB2B(a);
         return (
-          <text key={a.id} x={cx} y={y + i * size * gap} fontSize={fitMeasured(t, maxW, { family, size, weight, tracking: -size * 0.02 })} letterSpacing={-size * 0.02}>
+          <text key={a.id} x={cx} y={y + i * size * 1.02} fontSize={fitMeasured(t, maxW, { family, size, weight, italic, tracking: -size * 0.02 })} letterSpacing={-size * 0.02}>
             {t}
           </text>
         );
@@ -384,448 +160,694 @@ function Lineup({
   );
 }
 
-const PhotoOverlay = ({ settings, photoSrc, W, H, hue }: { settings: CreativeSettings; photoSrc: string | null; W: number; H: number; hue: string }) =>
+const PhotoLayer = ({ settings, photoSrc, W, H, light, opacity = 0.35 }: { settings: CreativeSettings; photoSrc: string | null; W: number; H: number; light: string; opacity?: number }) =>
   settings.photo ? (
-    <g opacity={0.38} style={{ mixBlendMode: 'screen' }}>
-      <Photo width={W} height={H} kind="crowd" src={photoSrc} shadow="#000000" light={mix(hue, '#ffffff', 0.4)} grain={0.4} />
+    <g opacity={opacity}>
+      <Photo width={W} height={H} kind="crowd" src={photoSrc} shadow="#000000" light={light} grain={0.4} />
     </g>
   ) : null;
 
 /* ======================================================================= */
-/* 18 — GLOSSY                                                             */
+/* 18 — FACETTES : a mirror ball shaped like the "?"                       */
 /* ======================================================================= */
 
-const glossyStyle: WordStyle = {
-  family: "'Syne'",
-  css: FONT.display,
-  weight: 800,
-  tracking: 0.01,
-  Symbol: ({ tone }) => <GlossyQ cx={150} cy={150} h={250} color={tone.accent} />,
-};
-const GlossyLogo = makeLogo(glossyStyle);
+function MirrorQ({ cx, cy, h, tint, cell = 22, seed = 3 }: { cx: number; cy: number; h: number; tint: string; cell?: number; seed?: number }) {
+  const tiles = useMemo(() => {
+    const r = rng(seed);
+    const field = questionField(cx, cy, h, h * 0.1);
+    const out: { x: number; y: number; c: string; hot: boolean }[] = [];
+    for (let y = cy - h * 0.6; y < cy + h * 0.6; y += cell) {
+      for (let x = cx - h * 0.45; x < cx + h * 0.45; x += cell) {
+        const v = field(x + cell / 2, y + cell / 2);
+        if (v < 0.22) continue;
+        const light = Math.max(0, 1 - Math.hypot(x - (cx - h * 0.2), y - (cy - h * 0.35)) / (h * 0.9));
+        const b = 0.25 + 0.5 * r() + 0.35 * light;
+        const hot = r() < 0.06 + light * 0.12;
+        const base = mix('#1c1d22', '#e9ecf2', Math.min(1, b));
+        out.push({ x, y, c: hot ? '#ffffff' : r() < 0.18 ? mix(base, tint, 0.55) : base, hot });
+      }
+    }
+    return out;
+  }, [cx, cy, h, tint, cell, seed]);
+  return (
+    <g>
+      {tiles.map((t, i) => (
+        <rect key={i} x={t.x + 1.2} y={t.y + 1.2} width={cell - 2.4} height={cell - 2.4} rx={1.5} fill={t.c} />
+      ))}
+      {tiles
+        .filter((t) => t.hot)
+        .map((t, i) => (
+          <Sparkle key={i} x={t.x + cell / 2} y={t.y + cell / 2} s={cell * 0.9} />
+        ))}
+    </g>
+  );
+}
 
-function GlossyPoster({ content, settings, colors, format, photoSrc }: PosterProps) {
+function Sparkle({ x, y, s, color = '#ffffff' }: { x: number; y: number; s: number; color?: string }) {
+  return <path d={`M${f1(x)} ${f1(y - s)}Q${f1(x)} ${f1(y)} ${f1(x + s)} ${f1(y)}Q${f1(x)} ${f1(y)} ${f1(x)} ${f1(y + s)}Q${f1(x)} ${f1(y)} ${f1(x - s)} ${f1(y)}Q${f1(x)} ${f1(y)} ${f1(x)} ${f1(y - s)}Z`} fill={color} />;
+}
+
+/** Light spots thrown by the ball across the room. */
+function Spots({ W, H, tint, seed = 8, n = 70 }: { W: number; H: number; tint: string; seed?: number; n?: number }) {
+  const spots = useMemo(() => {
+    const r = rng(seed);
+    return Array.from({ length: n }, () => ({ x: r() * W, y: r() * H, rx: 4 + r() * 16, ry: 3 + r() * 9, rot: r() * 180, c: r() < 0.3 ? tint : '#ffffff', o: 0.35 + r() * 0.6 }));
+  }, [W, H, tint, seed, n]);
+  return (
+    <g>
+      <Blur sd={6}>
+        {spots.map((s, i) => (
+          <ellipse key={i} cx={s.x} cy={s.y} rx={s.rx * 2.2} ry={s.ry * 2.2} fill={s.c} opacity={s.o * 0.5} transform={`rotate(${f1(s.rot)} ${f1(s.x)} ${f1(s.y)})`} />
+        ))}
+      </Blur>
+      {spots.map((s, i) => (
+        <ellipse key={i} cx={s.x} cy={s.y} rx={s.rx} ry={s.ry} fill={s.c} opacity={s.o} transform={`rotate(${f1(s.rot)} ${f1(s.x)} ${f1(s.y)})`} />
+      ))}
+    </g>
+  );
+}
+
+const facettesStyle: WordStyle = {
+  family: "'General Sans'",
+  css: FONT.sans,
+  weight: 600,
+  tracking: 0.06,
+  Symbol: ({ tone }) => (
+    <g>
+      <line x1={150} x2={150} y1={0} y2={34} stroke={tone.fg} strokeWidth={3} />
+      <MirrorQ cx={150} cy={160} h={230} tint={tone.accent} cell={12} />
+    </g>
+  ),
+};
+
+function FacettesPoster({ content, settings, colors, format, photoSrc }: PosterProps) {
   const sq = format === 'square';
   const W = 1000;
   const H = sq ? 1000 : 1500;
   const hue = baseHue(colors, settings);
-  const r = rng(21);
-  const tubes = useMemo(
-    () =>
-      Array.from({ length: sq ? 5 : 7 }, (_, i) => ({
-        x: i % 2 ? W - 60 - r() * 220 : 60 + r() * 220,
-        y: 80 + r() * (H - 160),
-        h: 160 + r() * 340,
-        rot: (r() - 0.5) * 80,
-        blur: i % 3 === 0 ? 0 : 6 + r() * 14,
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sq],
-  );
-  const split = settings.infoLayout === 'split';
+  const bg = mix(hue, '#000000', 0.72);
+  const qh = (sq ? 440 : 640) * settings.logoScale;
+  const qcy = sq ? 280 : 420;
   return (
-    <Artboard format={format} colors={{ ...colors, bg: mix(hue, '#000000', 0.35) }} texture={settings.texture * 0.4} label={`${content.brand} — glossy`}>
-      <Blobs w={W} h={H} colors={[mix(hue, '#ffffff', 0.35), mix(hue, '#000000', 0.55), hue]} />
-      <PhotoOverlay settings={settings} photoSrc={photoSrc} W={W} H={H} hue={hue} />
-      {tubes.map((t, i) => (
-        <GlossyQ key={i} cx={t.x} cy={t.y} h={t.h} color={mix(hue, '#ffffff', 0.15)} blur={t.blur} rot={t.rot} />
-      ))}
-      <Title st={glossyStyle} content={content} settings={settings} colors={colors} cx={W / 2} y={sq ? 70 : 120} maxW={sq ? 760 : 820} maxH={sq ? 200 : 230} />
-      <text x={W / 2} y={sq ? 330 : 400} textAnchor="middle" fontFamily={FONT.display} fontWeight={700} fontSize={sq ? 30 : 38} letterSpacing={sq ? 6 : 8} fill="#ffffff">
-        {content.date}
+    <Artboard format={format} colors={{ ...colors, bg }} texture={settings.texture * 0.4} label={`${content.brand} — facettes`}>
+      <defs>
+        <radialGradient id="facGlow" cx="0.5" cy={qcy / H} r="0.6">
+          <stop offset="0" stopColor={mix(hue, '#ffffff', 0.15)} stopOpacity="0.55" />
+          <stop offset="1" stopColor={bg} stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <rect width={W} height={H} fill="url(#facGlow)" />
+      <PhotoLayer settings={settings} photoSrc={photoSrc} W={W} H={H} light={mix(hue, '#ffffff', 0.5)} />
+      <Spots W={W} H={H} tint={mix(hue, '#ffffff', 0.3)} />
+      <line x1={W / 2} x2={W / 2} y1={0} y2={qcy - qh * 0.58} stroke="#d9dbe0" strokeWidth={3} />
+      <MirrorQ cx={W / 2} cy={qcy} h={qh} tint={hue} cell={sq ? 18 : 22} />
+      <Title st={facettesStyle} content={content} settings={settings.titleLayout === 'symbol' ? { ...settings, titleLayout: 'line' } : settings} colors={colors} cx={W / 2} y={sq ? 560 : 830} maxW={sq ? 760 : 840} maxH={sq ? 120 : 190} />
+      <text x={W / 2} y={sq ? 760 : 1050} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={sq ? 22 : 30} letterSpacing={sq ? 6 : 9} fill="#ffffff">
+        {content.date} · {content.venue}
       </text>
-      <text x={W / 2} y={sq ? 368 : 446} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={sq ? 20 : 24} letterSpacing={3} fill="#ffffff">
-        {content.venue}
-      </text>
-      <text x={W / 2} y={sq ? 520 : 760} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={sq ? 14 : 18} letterSpacing={2} fill="#ffffff">
-        {content.lineupTitle}
-      </text>
-      <Lineup
-        content={content}
-        cx={W / 2}
-        y={sq ? 590 : 850}
-        maxW={sq ? 760 : 840}
-        size={split ? (sq ? 60 : 84) : sq ? 50 : 70}
-        family="'General Sans'"
-        css={FONT.sans}
-        weight={700}
-        gap={0.98}
-      />
-      <text x={W / 2} y={H - (sq ? 70 : 150)} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={sq ? 14 : 17} letterSpacing={1.5} fill="#ffffff">
-        {(content.mentions || content.pillars).toUpperCase()}
-      </text>
-      <text x={W / 2} y={H - (sq ? 48 : 124)} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={sq ? 14 : 17} letterSpacing={1.5} fill="#ffffff" opacity={0.85}>
-        {content.edition}
+      <Lineup content={content} cx={W / 2} y={sq ? 830 : 1150} maxW={sq ? 820 : 860} size={settings.infoLayout === 'split' ? (sq ? 40 : 62) : sq ? 32 : 48} family="'General Sans'" css={FONT.sans} weight={700} />
+      <text x={W / 2} y={H - (sq ? 26 : 56)} textAnchor="middle" fontFamily={FONT.sans} fontWeight={500} fontSize={sq ? 13 : 16} letterSpacing={3} fill="#ffffff" opacity={0.8}>
+        {content.mentions || `${content.edition} · ${content.pillars}`}
       </text>
     </Artboard>
   );
 }
 
 /* ======================================================================= */
-/* 19 — CLUB (serif, lights)                                               */
+/* 19 — BAB : the studded blue door of Sidi Bou Saïd                       */
 /* ======================================================================= */
 
-const clubStyle: WordStyle = {
+function Stud({ x, y, r }: { x: number; y: number; r: number }) {
+  return (
+    <g>
+      <circle cx={x + r * 0.25} cy={y + r * 0.35} r={r} fill="#000" opacity={0.35} />
+      <circle cx={x} cy={y} r={r} fill="url(#babStud)" />
+    </g>
+  );
+}
+
+function Door({ x, y, w, h, color, withQ = true, seed = 4 }: { x: number; y: number; w: number; h: number; color: string; withQ?: boolean; seed?: number }) {
+  const r = w / 2;
+  const arch = `M${x} ${y + h}V${y + r}A${r} ${r} 0 0 1 ${x + w} ${y + r}V${y + h}Z`;
+  const studs = useMemo(() => {
+    const pts: Pt[] = [];
+    const sp = w / 16;
+    const inset = w * 0.08;
+    // border following the arch
+    for (let a = Math.PI; a <= Math.PI * 2 + 0.001; a += sp / (r - inset)) pts.push([x + r + Math.cos(a) * (r - inset), y + r + Math.sin(a) * (r - inset)]);
+    for (let yy = y + r; yy <= y + h - inset; yy += sp) pts.push([x + inset, yy], [x + w - inset, yy]);
+    for (let xx = x + inset; xx <= x + w - inset; xx += sp) pts.push([xx, y + h - inset]);
+    // central rosette-like square frame
+    const fx0 = x + w * 0.2;
+    const fx1 = x + w * 0.8;
+    const fy0 = y + h * 0.66;
+    const fy1 = y + h * 0.86;
+    for (let xx = fx0; xx <= fx1; xx += sp) pts.push([xx, fy0], [xx, fy1]);
+    for (let yy = fy0 + sp; yy < fy1; yy += sp) pts.push([fx0, yy], [fx1, yy]);
+    const q = withQ ? qPoints(x + w / 2, y + h * 0.4, w * 0.62, sp * 0.95) : [];
+    return { frame: pts, q };
+  }, [x, y, w, h, r, withQ]);
+  const sr = w / 46;
+  const rr = rng(seed);
+  return (
+    <g>
+      <defs>
+        <radialGradient id="babStud" cx="0.35" cy="0.35" r="0.7">
+          <stop offset="0" stopColor="#9aa0a8" />
+          <stop offset="0.45" stopColor="#2a2d33" />
+          <stop offset="1" stopColor="#08090b" />
+        </radialGradient>
+        <linearGradient id="babWood" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stopColor={mix(color, '#000000', 0.25)} />
+          <stop offset="0.5" stopColor={color} />
+          <stop offset="1" stopColor={mix(color, '#000000', 0.3)} />
+        </linearGradient>
+      </defs>
+      <path d={`M${x - w * 0.06} ${y + h}V${y + r}A${r + w * 0.06} ${r + w * 0.06} 0 0 1 ${x + w + w * 0.06} ${y + r}V${y + h}Z`} fill="#f7f4ee" stroke="#d9d3c8" strokeWidth={2} />
+      <path d={arch} fill="url(#babWood)" />
+      {Array.from({ length: 6 }, (_, i) => (
+        <line key={i} x1={x + (w * (i + 1)) / 7} x2={x + (w * (i + 1)) / 7} y1={y + r * 0.2} y2={y + h} stroke="#000" strokeOpacity={0.12} strokeWidth={2} />
+      ))}
+      {studs.frame.map(([sx, sy], i) => (
+        <Stud key={i} x={sx} y={sy} r={sr} />
+      ))}
+      {studs.q.map(([sx, sy], i) => (
+        <Stud key={'q' + i} x={sx} y={sy} r={sr * (1.25 + rr() * 0.1)} />
+      ))}
+      <circle cx={x + w * 0.82} cy={y + h * 0.58} r={w * 0.045} fill="none" stroke="#1a1b1e" strokeWidth={w * 0.014} />
+    </g>
+  );
+}
+
+const babStyle: WordStyle = {
   family: "'Gambetta'",
   css: FONT.gambetta,
-  weight: 700,
-  lower: true,
-  tracking: -0.02,
+  weight: 600,
+  tracking: 0.12,
   Symbol: ({ tone }) => (
     <g>
-      <circle cx={150} cy={150} r={138} fill="none" stroke={tone.fg} strokeWidth={6} />
-      <text x={150} y={232} textAnchor="middle" fontFamily={FONT.gambetta} fontWeight={700} fontSize={240} fill={tone.fg}>
+      <Door x={75} y={20} w={150} h={260} color={tone.accent} />
+    </g>
+  ),
+};
+
+function BabPoster({ content, settings, colors, format, photoSrc }: PosterProps) {
+  const sq = format === 'square';
+  const W = 1000;
+  const H = sq ? 1000 : 1500;
+  const night = colors.background === 'dark';
+  const wall = night ? '#14213a' : colors.background === 'accent' ? mix(settings.accent, '#ffffff', 0.85) : '#f3efe6';
+  const ink = night ? '#f3efe6' : '#16233f';
+  const door = settings.accent;
+  const dw = (sq ? 360 : 470) * settings.logoScale;
+  const dh = dw * 1.72;
+  const dx = sq ? 560 - dw / 2 + 140 : W / 2 - dw / 2;
+  const dy = sq ? 1000 - dh - 40 : 380;
+  const r = rng(13);
+  return (
+    <Artboard format={format} colors={{ ...colors, bg: wall }} texture={settings.texture * 0.9} label={`${content.brand} — bab`}>
+      {/* lime-washed wall */}
+      {Array.from({ length: 26 }, (_, i) => (
+        <ellipse key={i} cx={r() * W} cy={r() * H} rx={80 + r() * 200} ry={30 + r() * 80} fill={night ? '#0c1526' : '#e3ddd0'} opacity={0.35} />
+      ))}
+      {night && (
+        <Blur sd={60}>
+          <ellipse cx={dx + dw / 2} cy={dy + dh * 0.1} rx={dw * 0.8} ry={dw * 0.5} fill="#ffcf7a" opacity={0.35} />
+        </Blur>
+      )}
+      <PhotoLayer settings={settings} photoSrc={photoSrc} W={W} H={H} light={wall} opacity={0.18} />
+      {/* bougainvillea */}
+      <Blur sd={1.5}>
+        {Array.from({ length: 90 }, (_, i) => {
+          const side = i % 2 ? 1 : -1;
+          const t = r();
+          const cx0 = dx + dw / 2 + side * (dw * 0.58 + r() * dw * 0.22);
+          const cy0 = dy + dw * 0.25 + t * dh * 0.55;
+          return <circle key={i} cx={cx0} cy={cy0} r={6 + r() * 12} fill={r() < 0.72 ? '#d6337a' : '#2f6b3a'} opacity={0.85} />;
+        })}
+      </Blur>
+      <Door x={dx} y={dy} w={dw} h={dh} color={door} />
+      {sq ? (
+        <g>
+          <Title st={babStyle} content={content} settings={settings.titleLayout === 'symbol' ? { ...settings, titleLayout: 'stacked' } : settings} colors={colors} cx={250} y={60} maxW={420} maxH={230} fg={ink} />
+          <text x={250} y={360} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={22} letterSpacing={4} fill={ink}>
+            {content.date}
+          </text>
+          <Lineup content={content} cx={250} y={460} maxW={420} size={34} family="'General Sans'" css={FONT.sans} weight={700} color={ink} />
+          <text x={250} y={930} textAnchor="middle" fontFamily={FONT.gambetta} fontStyle="italic" fontSize={26} fill={ink}>
+            {content.venue.toLowerCase()}
+          </text>
+        </g>
+      ) : (
+        <g>
+          <Title st={babStyle} content={content} settings={settings.titleLayout === 'symbol' ? { ...settings, titleLayout: 'line' } : settings} colors={colors} cx={W / 2} y={60} maxW={820} maxH={220} fg={ink} />
+          <text x={W / 2} y={dy - 26} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={24} letterSpacing={6} fill={ink}>
+            {content.date} — {content.venue}
+          </text>
+          <Lineup content={content} cx={W / 2} y={dy + dh + 90} maxW={840} size={settings.infoLayout === 'split' ? 56 : 44} family="'General Sans'" css={FONT.sans} weight={700} color={ink} />
+          <text x={W / 2} y={H - 46} textAnchor="middle" fontFamily={FONT.gambetta} fontStyle="italic" fontSize={24} fill={ink}>
+            {lines(content.signature).join(' · ').toLowerCase()}
+          </text>
+        </g>
+      )}
+    </Artboard>
+  );
+}
+
+/* ======================================================================= */
+/* 20 — MACHMOUM : jasmine flowers composing the "?"                       */
+/* ======================================================================= */
+
+function Jasmine({ x, y, s, rot, open = 1 }: { x: number; y: number; s: number; rot: number; open?: number }) {
+  return (
+    <g transform={`translate(${f1(x)} ${f1(y)}) rotate(${f1(rot)}) scale(${f1(s * 100) / 100})`}>
+      {[0, 1, 2, 3, 4].map((k) => (
+        <ellipse key={k} cx={0} cy={-11 * open} rx={6.2} ry={11} fill="url(#jasPetal)" transform={`rotate(${k * 72})`} />
+      ))}
+      <circle r={2.6} fill="#e8d27a" />
+    </g>
+  );
+}
+
+function JasmineQ({ cx, cy, h, seed = 6 }: { cx: number; cy: number; h: number; seed?: number }) {
+  const flowers = useMemo(() => {
+    const r = rng(seed);
+    const pts = qPoints(cx, cy, h, h * 0.032);
+    return pts.flatMap(([x, y]) =>
+      Array.from({ length: 2 }, () => ({ x: x + (r() - 0.5) * h * 0.07, y: y + (r() - 0.5) * h * 0.07, s: (h / 600) * (1 + r() * 0.9), rot: r() * 72, open: 0.7 + r() * 0.4, bud: r() < 0.2 })),
+    );
+  }, [cx, cy, h, seed]);
+  return (
+    <g>
+      {flowers.map((f, i) =>
+        f.bud ? (
+          <ellipse key={i} cx={f.x} cy={f.y} rx={5 * f.s} ry={9 * f.s} fill="#f3e9f0" transform={`rotate(${f.rot * 5} ${f.x} ${f.y})`} />
+        ) : (
+          <Jasmine key={i} x={f.x} y={f.y} s={f.s} rot={f.rot} open={f.open} />
+        ),
+      )}
+    </g>
+  );
+}
+
+const JasDefs = () => (
+  <defs>
+    <radialGradient id="jasPetal" cx="0.5" cy="0.8" r="0.9">
+      <stop offset="0" stopColor="#f1e3c8" />
+      <stop offset="0.35" stopColor="#ffffff" />
+      <stop offset="1" stopColor="#efe6f2" />
+    </radialGradient>
+  </defs>
+);
+
+const machmoumStyle: WordStyle = {
+  family: "'Gambetta'",
+  css: FONT.gambetta,
+  weight: 500,
+  italic: true,
+  lower: true,
+  tracking: -0.01,
+  Symbol: () => (
+    <g>
+      <JasDefs />
+      <JasmineQ cx={150} cy={150} h={250} />
+    </g>
+  ),
+};
+
+function MachmoumPoster({ content, settings, colors, format, photoSrc }: PosterProps) {
+  const sq = format === 'square';
+  const W = 1000;
+  const H = sq ? 1000 : 1500;
+  const hue = baseHue(colors, settings);
+  const bg = mix(hue, '#04060a', 0.8);
+  const qh = (sq ? 560 : 720) * settings.logoScale;
+  const qcy = sq ? 420 : 560;
+  const r = rng(30);
+  return (
+    <Artboard format={format} colors={{ ...colors, bg }} texture={settings.texture * 0.5} label={`${content.brand} — machmoum`}>
+      <JasDefs />
+      <Blur sd={120}>
+        <ellipse cx={W / 2} cy={qcy} rx={420} ry={520} fill={mix(hue, '#ffffff', 0.08)} opacity={0.6} />
+      </Blur>
+      <PhotoLayer settings={settings} photoSrc={photoSrc} W={W} H={H} light={mix(hue, '#ffffff', 0.4)} opacity={0.25} />
+      {/* falling petals out of focus */}
+      <Blur sd={5}>
+        {Array.from({ length: 22 }, (_, i) => (
+          <ellipse key={i} cx={r() * W} cy={r() * H} rx={8 + r() * 10} ry={14 + r() * 16} fill="#ffffff" opacity={0.25 + r() * 0.3} transform={`rotate(${r() * 180} 0 0)`} />
+        ))}
+      </Blur>
+      <Blur sd={18}>
+        <JasmineQ cx={W / 2 + 6} cy={qcy + 10} h={qh} seed={7} />
+      </Blur>
+      <JasmineQ cx={W / 2} cy={qcy} h={qh} />
+      <text x={W / 2} y={sq ? 60 : 90} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={sq ? 15 : 19} letterSpacing={6} fill="#f3eee6">
+        {content.edition} · {content.venue}
+      </text>
+      <Title st={machmoumStyle} content={content} settings={settings.titleLayout === 'symbol' ? { ...settings, titleLayout: 'line' } : settings} colors={colors} cx={W / 2} y={sq ? 720 : 960} maxW={sq ? 640 : 780} maxH={sq ? 110 : 170} fg="#f6f0e6" />
+      <text x={W / 2} y={sq ? 870 : 1190} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={sq ? 22 : 28} letterSpacing={8} fill="#f3eee6">
+        {content.date}
+      </text>
+      <Lineup content={content} cx={W / 2} y={sq ? 920 : 1270} maxW={sq ? 820 : 860} size={settings.infoLayout === 'split' ? (sq ? 30 : 46) : sq ? 26 : 38} family="'General Sans'" css={FONT.sans} weight={700} color="#ffffff" oneRow={sq ? ' · ' : undefined} />
+    </Artboard>
+  );
+}
+
+/* ======================================================================= */
+/* 21 — THERMIQUE : the dance floor seen by a thermal camera               */
+/* ======================================================================= */
+
+const INFERNO = {
+  r: '0 0.12 0.42 0.78 0.98 1 1',
+  g: '0 0.02 0.04 0.18 0.5 0.85 1',
+  b: '0.02 0.3 0.45 0.3 0.08 0.25 0.95',
+};
+
+function ThermalField({ W, H, qcx, qcy, qh, seed = 2, people = 160 }: { W: number; H: number; qcx: number; qcy: number; qh: number; seed?: number; people?: number }) {
+  const id = useUid('th');
+  const bodies = useMemo(() => {
+    const r = rng(seed);
+    return Array.from({ length: people }, () => {
+      const cluster = r() < 0.6;
+      const x = cluster ? qcx + (r() - 0.5) * W * 0.7 : r() * W;
+      const y = cluster ? qcy + (r() - 0.5) * H * 0.6 : r() * H;
+      return { x, y, s: 16 + r() * 18, o: 0.18 + r() * 0.2 };
+    });
+  }, [W, H, qcx, qcy, seed, people]);
+  const s = qh / 100;
+  return (
+    <g filter={`url(#${id})`}>
+      <defs>
+        <filter id={id} x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
+          <feGaussianBlur stdDeviation="22" />
+          <feComponentTransfer>
+            <feFuncR type="table" tableValues={INFERNO.r} />
+            <feFuncG type="table" tableValues={INFERNO.g} />
+            <feFuncB type="table" tableValues={INFERNO.b} />
+          </feComponentTransfer>
+        </filter>
+      </defs>
+      <rect width={W} height={H} fill="#000" />
+      {bodies.map((b, i) => (
+        <circle key={i} cx={b.x} cy={b.y} r={b.s} fill="#fff" opacity={b.o} />
+      ))}
+      <path d={QUESTION_GLYPH.d} transform={`translate(${f1(qcx - 28 * s)} ${f1(qcy - 50 * s)}) scale(${f1(s * 100) / 100})`} fill="none" stroke="#fff" strokeWidth={16} strokeLinecap="round" strokeLinejoin="round" opacity={0.92} />
+    </g>
+  );
+}
+
+function Hud({ W, H, x, y, label }: { W: number; H: number; x: number; y: number; label: string }) {
+  const c = '#ffffff';
+  const corner = (cx: number, cy: number, dx: number, dy: number) => <path d={`M${cx} ${cy + dy * 40}V${cy}H${cx + dx * 40}`} fill="none" stroke={c} strokeWidth={3} />;
+  return (
+    <g opacity={0.9}>
+      {corner(40, 40, 1, 1)}
+      {corner(W - 40, 40, -1, 1)}
+      {corner(40, H - 40, 1, -1)}
+      {corner(W - 40, H - 40, -1, -1)}
+      <g stroke={c} strokeWidth={2} fill="none">
+        <circle cx={x} cy={y} r={34} />
+        <path d={`M${x - 60} ${y}H${x - 40}M${x + 40} ${y}H${x + 60}M${x} ${y - 60}V${y - 40}M${x} ${y + 40}V${y + 60}`} />
+      </g>
+      <text x={x + 48} y={y - 46} fontFamily={FONT.mono} fontSize={16} letterSpacing={2} fill={c}>
+        {label}
+      </text>
+    </g>
+  );
+}
+
+const thermiqueStyle: WordStyle = {
+  family: "'IBM Plex Mono'",
+  css: FONT.mono,
+  weight: 500,
+  tracking: 0.04,
+  Symbol: () => (
+    <g>
+      <ThermalField W={300} H={300} qcx={150} qcy={150} qh={210} people={30} />
+    </g>
+  ),
+};
+
+function ThermiquePoster({ content, settings, colors, format, photoSrc }: PosterProps) {
+  const sq = format === 'square';
+  const W = 1000;
+  const H = sq ? 1000 : 1500;
+  const qh = (sq ? 520 : 640) * settings.logoScale;
+  const qcy = sq ? 440 : 600;
+  const scale = ['#000000', '#3a0a5a', '#9a1c5a', '#e8471a', '#ffb21a', '#fff4c8'];
+  return (
+    <Artboard format={format} colors={{ ...colors, bg: '#000000' }} texture={settings.texture * 0.6} label={`${content.brand} — thermique`}>
+      <ThermalField W={W} H={H} qcx={W / 2} qcy={qcy} qh={qh} />
+      <PhotoLayer settings={settings} photoSrc={photoSrc} W={W} H={H} light="#ffb21a" opacity={0.18} />
+      <Hud W={W} H={H} x={W / 2 + qh * 0.05} y={qcy + qh * 0.47} label="T° MAX" />
+      <g>
+        {scale.map((c, i) => (
+          <rect key={i} x={W - 70} y={(sq ? 300 : 420) + i * 50} width={18} height={50} fill={c} />
+        ))}
+        <text x={W - 80} y={sq ? 316 : 436} textAnchor="end" fontFamily={FONT.mono} fontSize={14} fill="#fff">
+          −
+        </text>
+        <text x={W - 80} y={(sq ? 300 : 420) + 300} textAnchor="end" fontFamily={FONT.mono} fontSize={14} fill="#fff">
+          +
+        </text>
+      </g>
+      <text x={70} y={sq ? 80 : 96} fontFamily={FONT.mono} fontSize={sq ? 14 : 16} letterSpacing={3} fill="#ffffff">
+        ● REC · {content.edition} · {shortDate(content.date)}
+      </text>
+      <Title st={thermiqueStyle} content={content} settings={settings.titleLayout === 'symbol' ? { ...settings, titleLayout: 'line' } : settings} colors={colors} cx={W / 2} y={sq ? 100 : 130} maxW={sq ? 760 : 820} maxH={sq ? 110 : 150} />
+      <text x={W / 2} y={sq ? 820 : 1130} textAnchor="middle" fontFamily={FONT.mono} fontWeight={500} fontSize={sq ? 20 : 24} letterSpacing={6} fill="#ffffff">
+        {content.date} · {content.venue}
+      </text>
+      <Lineup content={content} cx={W / 2} y={sq ? 880 : 1220} maxW={sq ? 820 : 860} size={settings.infoLayout === 'split' ? (sq ? 36 : 56) : sq ? 28 : 44} family="'General Sans'" css={FONT.sans} weight={700} />
+      <text x={W / 2} y={H - (sq ? 26 : 50)} textAnchor="middle" fontFamily={FONT.mono} fontSize={sq ? 12 : 14} letterSpacing={3} fill="#ffffff" opacity={0.8}>
+        {lines(content.signature).join(' / ')}
+      </text>
+    </Artboard>
+  );
+}
+
+/* ======================================================================= */
+/* 22 — BRACELET : a giant woven entry wristband                           */
+/* ======================================================================= */
+
+function Ribbon({ ctrl, width, front, back, text, seed = 1 }: { ctrl: Pt[]; width: number; front: string; back: string; text: string; seed?: number }) {
+  const id = useUid('rb');
+  const data = useMemo(() => {
+    const pts = catmull(ctrl, 40);
+    // twist: width follows |cos|, side follows sign
+    const lens = [0];
+    for (let i = 1; i < pts.length; i++) lens.push(lens[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    const tw = (i: number) => Math.cos(lens[i] * 0.0042 + seed);
+    const runs: { pts: Pt[]; front: boolean; idx: number[] }[] = [];
+    pts.forEach((p, i) => {
+      const f = tw(i) >= 0;
+      const last = runs[runs.length - 1];
+      if (!last || last.front !== f) runs.push({ pts: last ? [last.pts[last.pts.length - 1], p] : [p], front: f, idx: last ? [last.idx[last.idx.length - 1], i] : [i] });
+      else {
+        last.pts.push(p);
+        last.idx.push(i);
+      }
+    });
+    const center = 'M' + pts.map(([x, y]) => `${f1(x)} ${f1(y)}`).join('L');
+    return {
+      runs: runs.map((r) => ({ front: r.front, d: outline(r.pts, (t) => width * (0.08 + 0.92 * Math.abs(tw(r.idx[Math.min(r.idx.length - 1, Math.round(t * (r.idx.length - 1)))])))) })),
+      center,
+      total: lens[lens.length - 1],
+    };
+  }, [ctrl, width, seed]);
+  const unit = text + ' · ';
+  const reps = Math.max(1, Math.ceil(data.total / (unit.length * width * 0.36)));
+  return (
+    <g>
+      <defs>
+        <path id={id + 'c'} d={data.center} />
+        <pattern id={id + 'weave'} width="6" height="6" patternUnits="userSpaceOnUse">
+          <path d="M0 0H6M0 3H6" stroke="#000" strokeOpacity="0.12" strokeWidth="1" />
+        </pattern>
+      </defs>
+      <Blur sd={18}>
+        {data.runs.map((r, i) => (
+          <path key={i} d={r.d} fill="#000" opacity={0.35} transform="translate(18 26)" />
+        ))}
+      </Blur>
+      {data.runs.map((r, i) => (
+        <g key={i}>
+          <path d={r.d} fill={r.front ? front : back} />
+          <path d={r.d} fill={`url(#${id}weave)`} />
+        </g>
+      ))}
+      <text fontFamily={FONT.sans} fontWeight={700} fontSize={width * 0.42} letterSpacing={width * 0.04} fill="#ffffff" dy={width * 0.15}>
+        <textPath href={`#${id}c`}>{unit.repeat(reps)}</textPath>
+      </text>
+    </g>
+  );
+}
+
+const braceletStyle: WordStyle = {
+  family: "'Anton'",
+  css: FONT.condensed,
+  weight: 400,
+  tracking: 0.02,
+  Symbol: ({ tone }) => (
+    <g>
+      <ellipse cx={150} cy={150} rx={118} ry={70} fill="none" stroke={tone.accent} strokeWidth={46} transform="rotate(-18 150 150)" />
+      <ellipse cx={150} cy={150} rx={118} ry={70} fill="none" stroke="#000" strokeOpacity={0.12} strokeWidth={46} strokeDasharray="2 4" transform="rotate(-18 150 150)" />
+      <rect x={218} y={74} width={40} height={58} rx={6} fill="#cfd3da" stroke="#8a8f99" strokeWidth={3} transform="rotate(-18 238 103)" />
+      <text x={150} y={168} textAnchor="middle" fontFamily={FONT.condensed} fontSize={60} fill={tone.fg} transform="rotate(-18 150 150)">
         ?
       </text>
     </g>
   ),
 };
 
-function ClubPoster({ content, settings, colors, format, photoSrc }: PosterProps) {
-  const id = useUid('cp');
+function BraceletPoster({ content, settings, colors, format, photoSrc }: PosterProps) {
   const sq = format === 'square';
   const W = 1000;
   const H = sq ? 1000 : 1500;
-  const hue = baseHue(colors, settings);
-  const { base, question } = splitBrand(content.brand);
-  const ghost = (base.replace(/\s+/g, '') + (question ? '?' : '')).toLowerCase();
+  const hue = settings.accent;
+  const bg = colors.background === 'dark' ? '#0d0c0f' : colors.background === 'accent' ? mix(hue, '#ffffff', 0.82) : '#f2eee6';
+  const ink = colors.background === 'dark' ? '#f2eee6' : '#141414';
+  const k = settings.logoScale;
+  const ctrl: Pt[] = sq
+    ? [
+        [-80, 560],
+        [260, 460],
+        [520, 660],
+        [760, 420],
+        [1080, 560],
+      ]
+    : [
+        [-80, 640],
+        [300, 540],
+        [640, 780],
+        [380, 1000],
+        [760, 1070],
+        [1080, 900],
+      ];
+  const label = splitBrand(content.brand).base.toUpperCase() + (splitBrand(content.brand).question ? ' ?' : '') + ' · ' + content.edition;
   return (
-    <Artboard format={format} colors={{ ...colors, bg: '#0b0202' }} texture={settings.texture * 0.6} label={`${content.brand} — club`}>
-      <defs>
-        <filter id={id + 'g'} x="-10%" y="-10%" width="120%" height="120%">
-          <feGaussianBlur stdDeviation="3" />
-        </filter>
-        <linearGradient id={id + 'l'} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#ffcf8a" />
-          <stop offset="1" stopColor={mix(hue, '#ff7a2a', 0.4)} />
-        </linearGradient>
-      </defs>
-      <ClubScene w={W} h={H} hue={hue} />
-      <PhotoOverlay settings={settings} photoSrc={photoSrc} W={W} H={H} hue={hue} />
-      {/* giant glowing letters drifting behind */}
-      <g filter={`url(#${id}g)`} opacity={0.42} fontFamily={FONT.gambetta} fontWeight={700} fill={`url(#${id}l)`}>
-        {[...ghost].map((ch, i) => (
-          <text key={i} x={W * (0.22 + ((i * 0.37) % 0.62))} y={(sq ? 170 : 220) + i * (sq ? 85 : 130)} fontSize={sq ? 240 : 320} transform={`rotate(${(i % 3) * 8 - 8} ${W / 2} ${H / 2})`}>
-            {ch}
-          </text>
-        ))}
+    <Artboard format={format} colors={{ ...colors, bg }} texture={settings.texture * 0.6} label={`${content.brand} — bracelet`}>
+      <PhotoLayer settings={settings} photoSrc={photoSrc} W={W} H={H} light={bg} opacity={0.2} />
+      <Ribbon ctrl={ctrl} width={150 * k} front={hue} back={mix(hue, '#000000', 0.45)} text={label} />
+      <g transform={`translate(760 ${sq ? 420 : 1070}) rotate(-24)`}>
+        <rect x={-38 * k} y={-56 * k} width={76 * k} height={112 * k} rx={10 * k} fill="#d4d8de" stroke="#8b909a" strokeWidth={3} />
+        <rect x={-22 * k} y={-30 * k} width={44 * k} height={60 * k} rx={6 * k} fill="#aeb3bc" />
       </g>
-      <Title st={clubStyle} content={content} settings={settings} colors={colors} cx={W / 2} y={sq ? 90 : 170} maxW={sq ? 760 : 820} maxH={sq ? 210 : 260} />
-      <text x={W / 2 + (sq ? 190 : 230)} y={sq ? 340 : 470} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={sq ? 24 : 30} letterSpacing={4} fill="#ffffff">
-        {content.edition}
+      <Title st={braceletStyle} content={content} settings={settings.titleLayout === 'symbol' ? { ...settings, titleLayout: 'line' } : settings} colors={colors} cx={W / 2} y={sq ? 50 : 80} maxW={sq ? 760 : 840} maxH={sq ? 200 : 260} fg={ink} />
+      <text x={W / 2} y={sq ? 300 : 400} textAnchor="middle" fontFamily={FONT.sans} fontWeight={700} fontSize={sq ? 24 : 32} letterSpacing={6} fill={ink}>
+        {content.date} · {content.venue}
       </text>
-      <text x={W / 2} y={sq ? 640 : 1010} textAnchor="middle" fontFamily={FONT.gambetta} fontSize={sq ? 24 : 30} fill="#ffffff">
-        A~Z
-      </text>
-      <Lineup content={content} cx={W / 2} y={sq ? 696 : 1080} maxW={sq ? 820 : 860} size={sq ? 40 : 52} family="'Gambetta'" css={FONT.gambetta} weight={500} sep=" - " />
-      <text x={W / 2} y={sq ? 870 : 1300} textAnchor="middle" fontFamily={FONT.gambetta} fontWeight={700} fontSize={fitMeasured(content.date.toUpperCase(), 760, { family: "'Gambetta'", size: sq ? 46 : 62, weight: 700 })} fill="#ffffff">
-        {content.date.toUpperCase()}
-      </text>
-      <text x={W / 2} y={sq ? 910 : 1350} textAnchor="middle" fontFamily={FONT.gambetta} fontWeight={700} fontSize={sq ? 24 : 32} letterSpacing={1} fill="#ffffff">
-        {content.venue}.
+      <Lineup content={content} cx={W / 2} y={sq ? 800 : 1240} maxW={sq ? 820 : 860} size={settings.infoLayout === 'split' ? (sq ? 40 : 60) : sq ? 30 : 46} family="'Anton'" css={FONT.condensed} weight={400} color={ink} />
+      <text x={W / 2} y={H - (sq ? 30 : 56)} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={sq ? 13 : 16} letterSpacing={3} fill={ink} opacity={0.8}>
+        {content.mentions || content.pillars}
       </text>
     </Artboard>
   );
 }
 
 /* ======================================================================= */
-/* 20 — GOURMAND (puffy letters, sugar ring)                               */
+/* 23 — REFLET : the same place twice, by day and in its night reflection  */
 /* ======================================================================= */
 
-const CREAM = '#fff4dc';
-const puffyStyle: WordStyle = {
-  family: "'General Sans'",
-  css: FONT.sans,
-  weight: 700,
-  lower: true,
-  tracking: -0.04,
-  paint: (fill, _a, id, size) => ({
-    defs: (
-      <defs>
-        <filter id={id + 'ps'} x="-10%" y="-20%" width="120%" height="150%">
-          <feDropShadow dx="0" dy={size * 0.05} stdDeviation={size * 0.05} floodColor="#5a0000" floodOpacity="0.55" />
-        </filter>
-      </defs>
-    ),
-    props: { stroke: fill, strokeWidth: size * 0.045, strokeLinejoin: 'round', paintOrder: 'stroke', letterSpacing: size * 0.01, filter: `url(#${id}ps)` },
-  }),
-  Symbol: ({ tone }) => <SugarRing cx={150} cy={150} R={100} sw={70} hue={tone.accent} />,
-};
-
-function GourmandPoster({ content, settings, colors, format, photoSrc }: PosterProps) {
-  const id = useUid('gm');
-  const sq = format === 'square';
-  const W = 1000;
-  const H = sq ? 1000 : 1500;
-  const hue = baseHue(colors, settings);
-  const cy = sq ? 470 : 690;
+function Facade({ W, base, line, lights }: { W: number; base: number; line: string; lights: string }) {
+  const arches = [0.22, 0.5, 0.78].map((f) => W * f);
+  const aw = W * 0.18;
+  const ah = 300;
+  const bulbs: Pt[] = [];
+  for (let s = 0; s < 3; s++) {
+    const x0 = W * (0.05 + s * 0.3);
+    const x1 = x0 + W * 0.3;
+    for (let i = 0; i <= 12; i++) {
+      const t = i / 12;
+      bulbs.push([x0 + (x1 - x0) * t, base - ah - 70 + Math.sin(t * Math.PI) * 40]);
+    }
+  }
   return (
-    <Artboard format={format} colors={{ ...colors, bg: hue }} texture={settings.texture * 0.4} label={`${content.brand} — gourmand`}>
-      <defs>
-        <radialGradient id={id} cx="0.5" cy="0.45" r="0.75">
-          <stop offset="0" stopColor={mix(hue, '#ffb21a', 0.55)} />
-          <stop offset="0.6" stopColor={mix(hue, '#ff5a1a', 0.25)} />
-          <stop offset="1" stopColor={mix(hue, '#8a0d0d', 0.35)} />
-        </radialGradient>
-      </defs>
-      <rect width={W} height={H} fill={`url(#${id})`} />
-      <PhotoOverlay settings={settings} photoSrc={photoSrc} W={W} H={H} hue={hue} />
-      <SugarRing cx={W / 2} cy={cy} R={(sq ? 250 : 300) * settings.logoScale} sw={(sq ? 150 : 190) * settings.logoScale} hue={mix(hue, '#7a0000', 0.35)} />
-      <GlossyQ cx={W * 0.86} cy={cy - 290} h={130} color={mix(hue, '#ff3030', 0.5)} blur={4} rot={18} />
-      <GlossyQ cx={W * 0.12} cy={cy + 330} h={90} color={mix(hue, '#ff3030', 0.5)} blur={7} rot={-20} />
-      <text x={W / 2} y={sq ? 90 : 150} textAnchor="middle" fontFamily={FONT.gambetta} fontSize={sq ? 44 : 58} fill={CREAM}>
-        {content.venue.charAt(0) + content.venue.slice(1).toLowerCase()}
-      </text>
-      <text x={W / 2} y={cy - (sq ? 92 : 112)} textAnchor="middle" fontFamily={FONT.sans} fontWeight={700} fontSize={sq ? 20 : 26} fill="#ffffff">
-        {content.edition}
-      </text>
-      <Title st={puffyStyle} content={content} settings={{ ...settings, logoScale: 1 }} colors={{ ...colors }} cx={W / 2} y={cy - (sq ? 80 : 95)} maxW={sq ? 840 : 900} maxH={sq ? 200 : 230} />
-      <Lineup content={content} cx={W / 2} y={cy + (sq ? 170 : 200)} maxW={sq ? 600 : 640} size={sq ? 24 : 30} family="'General Sans'" css={FONT.sans} weight={700} sep=" - " color="#ffffff" />
-      <text x={W / 2} y={H - (sq ? 110 : 200)} textAnchor="middle" fontFamily={FONT.sans} fontWeight={700} fontSize={sq ? 20 : 26} fill="#ffffff">
-        {lines(content.signature)[0] ?? ''}
-      </text>
-      <text x={W / 2} y={H - (sq ? 80 : 164)} textAnchor="middle" fontFamily={FONT.sans} fontWeight={500} fontSize={sq ? 20 : 26} fill="#ffffff">
-        {content.date.charAt(0) + content.date.slice(1).toLowerCase()}
-      </text>
-    </Artboard>
+    <g fill="none" stroke={line} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+      <path d={`M0 ${base}H${W}`} />
+      <path d={`M${W * 0.04} ${base}V${base - ah - 40}H${W * 0.96}V${base}`} />
+      {arches.map((x, i) => (
+        <path key={i} d={`M${x - aw / 2} ${base}V${base - ah + aw / 2}A${aw / 2} ${aw / 2} 0 0 1 ${x + aw / 2} ${base - ah + aw / 2}V${base}`} />
+      ))}
+      {[0.06, 0.94].map((f, i) => {
+        const x = W * f;
+        return (
+          <g key={i}>
+            <path d={`M${x} ${base}Q${x + (i ? -20 : 20)} ${base - 260} ${x + (i ? -10 : 10)} ${base - 430}`} strokeWidth={6} />
+            {[-70, -35, 0, 35, 70].map((a, k) => (
+              <path key={k} d={`M${x + (i ? -10 : 10)} ${base - 430}q${f1(Math.sin((a * Math.PI) / 180) * 80)} -30 ${f1(Math.sin((a * Math.PI) / 180) * 150)} ${f1(40 + Math.abs(a))}`} />
+            ))}
+          </g>
+        );
+      })}
+      <path d={bulbs.map(([x, y], i) => `${i % 13 ? 'L' : 'M'}${f1(x)} ${f1(y)}`).join('')} strokeWidth={1.5} />
+      {bulbs.map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y + 6} r={5} fill={lights} stroke="none" />
+      ))}
+    </g>
   );
 }
-const GourmandLogo = makeLogo(puffyStyle);
 
-/* ======================================================================= */
-/* 21 — SUNSET (story)                                                     */
-/* ======================================================================= */
-
-const sunsetStyle: WordStyle = {
-  family: "'General Sans'",
-  css: FONT.sans,
-  weight: 700,
-  tracking: -0.02,
+const refletStyle: WordStyle = {
+  family: "'Cormorant Garamond'",
+  css: FONT.serif,
+  weight: 600,
+  tracking: 0.16,
   Symbol: ({ tone }) => (
-    <g>
-      <path d="M60 170A90 90 0 0 1 240 170Z" fill={tone.accent} />
-      {[0, 1, 2].map((i) => (
-        <rect key={i} x={50 + i * 20} y={190 + i * 26} width={200 - i * 40} height={12} rx={6} fill={tone.fg} />
-      ))}
+    <g fill="none" strokeWidth={6}>
+      <path d="M90 150V90A60 60 0 0 1 210 90V150" stroke={tone.fg} />
+      <path d="M90 150V210A60 60 0 0 0 210 210V150" stroke={tone.accent} strokeDasharray="10 8" />
+      <path d="M50 150H250" stroke={tone.fg} />
     </g>
   ),
 };
 
-function SunsetPoster({ content, settings, colors, format, photoSrc }: PosterProps) {
+function RefletPoster({ content, settings, colors, format, photoSrc }: PosterProps) {
+  const id = useUid('rf');
   const sq = format === 'square';
   const W = 1000;
   const H = sq ? 1000 : 1500;
-  const hue = baseHue(colors, settings);
-  const horizon = sq ? 640 : 1000;
-  const split = settings.infoLayout === 'split';
+  const mid = H / 2;
+  const hue = settings.accent;
+  const day = mix(hue, '#fff3df', 0.82);
+  const night = mix(hue, '#05060c', 0.82);
+  const base = mid - 10;
   return (
-    <Artboard format={format} colors={{ ...colors, bg: '#1a0f22' }} texture={settings.texture * 0.35} label={`${content.brand} — sunset`}>
-      <SunsetScene w={W} h={H} horizon={horizon} hue={hue} />
-      <PhotoOverlay settings={settings} photoSrc={photoSrc} W={W} H={H} hue={hue} />
-      <text x={W / 2} y={sq ? 70 : 150} textAnchor="middle" fontFamily={FONT.sans} fontWeight={700} fontSize={sq ? 18 : 22} letterSpacing={1} fill="#ffffff">
-        {lines(content.signature).slice(0, 2).join(' · ')}
-      </text>
-      <Title st={sunsetStyle} content={content} settings={settings} colors={colors} cx={W / 2} y={sq ? 90 : 180} maxW={sq ? 700 : 760} maxH={sq ? 170 : 210} />
-      <text x={W / 2} y={sq ? 330 : 470} textAnchor="middle" fontFamily={FONT.sans} fontWeight={700} fontSize={sq ? 52 : 70} fill="#ffffff">
-        {shortDate(content.date)}
-      </text>
-      {split ? (
-        <g textAnchor="middle">
-          <text x={W / 2} y={sq ? 380 : 560} fontFamily={FONT.sans} fontWeight={500} fontSize={sq ? 18 : 24} fill="#ffffff">
-            [{content.lineupTitle}]
-          </text>
-          {content.lineup.map((a, i) => (
-            <g key={a.id}>
-              <text x={W / 2} y={(sq ? 420 : 620) + i * (sq ? 48 : 86)} fontFamily={FONT.sans} fontWeight={700} fontSize={fitMeasured(a.name + ' [' + a.detail + ']', 760, { family: "'General Sans'", size: sq ? 30 : 40, weight: 700 })} fill="#ffffff">
-                {a.name}
-                {a.detail && <tspan fontWeight={400}> [{a.detail}]</tspan>}
-              </text>
-            </g>
-          ))}
-        </g>
-      ) : (
-        <Lineup content={content} cx={W / 2} y={sq ? 410 : 600} maxW={760} size={sq ? 34 : 46} family="'General Sans'" css={FONT.sans} weight={700} />
-      )}
-      <text x={W / 2} y={sq ? 600 : 860} textAnchor="middle" fontFamily={FONT.serif} fontWeight={400} fontSize={sq ? 40 : 60} letterSpacing={sq ? 10 : 14} fill="#ffffff">
-        {content.venue}
-      </text>
-      <g transform={`translate(${W / 2} ${H - (sq ? 90 : 170)})`}>
-        <rect x={-170} y={-36} width={340} height={72} rx={18} fill="#ffffff" />
-        <text y={12} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={28} fill="#111111">
-          {content.edition}
-        </text>
-      </g>
-    </Artboard>
-  );
-}
-
-/* ======================================================================= */
-/* 22 — HORIZON (panel)                                                    */
-/* ======================================================================= */
-
-const horizonStyle: WordStyle = {
-  family: "'General Sans'",
-  css: FONT.sans,
-  weight: 700,
-  tracking: -0.01,
-  Symbol: ({ tone }) => (
-    <g>
-      {[0, 1, 2, 3].map((i) => (
-        <rect key={i} x={60} y={70 + i * 46} width={180} height={i === 3 ? 10 : 26} rx={3} fill={i === 3 ? tone.accent : tone.fg} />
-      ))}
-    </g>
-  ),
-};
-
-function HorizonPoster({ content, settings, colors, format, photoSrc }: PosterProps) {
-  const id = useUid('hz');
-  const sq = format === 'square';
-  const W = 1000;
-  const H = sq ? 1000 : 1500;
-  const hue = baseHue(colors, settings);
-  const P = sq ? { x: 130, y: 180, w: 740, h: 620 } : { x: 125, y: 400, w: 750, h: 720 };
-  const bands = [P.h * 0.48, P.h * 0.27, P.h * 0.25];
-  const { head } = splitDate(content.date);
-  const tone: Tone = { fg: '#ffffff', accent: colors.accent };
-  const Logo = useMemo(() => makeLogo(horizonStyle), []);
-  return (
-    <Artboard format={format} colors={{ ...colors, bg: '#2a1206' }} texture={settings.texture * 0.35} label={`${content.brand} — horizon`}>
+    <Artboard format={format} colors={{ ...colors, bg: day }} texture={settings.texture * 0.5} label={`${content.brand} — reflet`}>
       <defs>
-        <clipPath id={id + 'p'}>
-          <rect x={P.x} y={P.y} width={P.w} height={P.h} />
-        </clipPath>
-      </defs>
-      <g transform={`translate(0 ${sq ? -260 : -560})`}>
-        <SunsetScene w={W} h={H + (sq ? 260 : 560)} horizon={sq ? 420 : 760} hue={hue} terrace={false} seed={11} />
-      </g>
-      <PhotoOverlay settings={settings} photoSrc={photoSrc} W={W} H={H} hue={hue} />
-      <g clipPath={`url(#${id}p)`}>
-        <g transform={`translate(0 ${sq ? -120 : -260})`}>
-          <SunsetScene w={W} h={H + 400} horizon={P.y + bands[0] + (sq ? 120 : 260) + 20} hue={mix(hue, '#ff4a1a', 0.3)} terrace={false} seed={17} />
-        </g>
-        <rect x={P.x} y={P.y} width={P.w} height={bands[0]} fill="#2b0d06" opacity={0.42} />
-        <rect x={P.x} y={P.y + bands[0] + bands[1]} width={P.w} height={bands[2]} fill="#250808" opacity={0.55} />
-      </g>
-      <Logo variant="symbol" brand={content.brand} tone={tone} x={W / 2 - (sq ? 50 : 70)} y={sq ? 40 : 110} width={sq ? 100 : 140} height={sq ? 100 : 140} />
-      {settings.titleLayout !== 'symbol' && (
-        <Logo
-          variant="primary"
-          layout="line"
-          brand={content.brand}
-          tone={tone}
-          x={P.x + 10}
-          y={P.y + 6}
-          width={P.w - 20}
-          height={((P.w - 20) * wordDims(horizonStyle, content.brand, 'line').h) / wordDims(horizonStyle, content.brand, 'line').w}
-        />
-      )}
-      {content.lineup.map((a, i) => (
-        <text key={a.id} x={P.x + 34} y={P.y + bands[0] - 120 + i * 44} fontFamily={FONT.sans} fontWeight={700} fontSize={fitMeasured(joinB2B(a), P.w - 60, { family: "'General Sans'", size: sq ? 30 : 36, weight: 700 })} fill="#ffffff">
-          {joinB2B(a)}
-        </text>
-      ))}
-      <text x={P.x + 34} y={P.y + bands[0] + 62} fontFamily={FONT.sans} fontWeight={700} fontSize={sq ? 32 : 38} fill="#ffffff">
-        {(lines(content.manifesto)[0] ?? '').toUpperCase()}
-      </text>
-      <text x={P.x + 34} y={P.y + bands[0] + bands[1] + 58} fontFamily={FONT.sans} fontWeight={700} fontSize={sq ? 30 : 36} fill="#ffffff">
-        {lines(content.signature)[0]}
-      </text>
-      <text x={P.x + 34} y={P.y + bands[0] + bands[1] + 98} fontFamily={FONT.sans} fontWeight={700} fontSize={sq ? 30 : 36} fill="#ffffff">
-        {lines(content.signature)[1]}
-      </text>
-      <text x={P.x + 34} y={P.y + P.h - 22} fontFamily={FONT.sans} fontWeight={600} fontSize={15} letterSpacing={3} fill="#ffffff">
-        {content.edition}
-      </text>
-      <text x={P.x + P.w - 30} y={P.y + bands[0] + bands[1] + 102} textAnchor="end" fontFamily={FONT.sans} fontWeight={700} fontSize={sq ? 70 : 88} fill="#ffffff">
-        {shortDate(content.date) === content.date ? head : shortDate(content.date)}
-      </text>
-      <text x={P.x + P.w - 30} y={P.y + P.h - 22} textAnchor="end" fontFamily={FONT.sans} fontWeight={600} fontSize={15} letterSpacing={3} fill="#ffffff">
-        {content.pillars}
-      </text>
-      <text x={W / 2} y={P.y + P.h + (sq ? 110 : 190)} textAnchor="middle" fontFamily={FONT.serif} fontSize={fitMeasured(content.venue, 760, { family: "'Cormorant Garamond'", size: sq ? 54 : 72, tracking: (sq ? 54 : 72) * 0.22 })} letterSpacing={(sq ? 54 : 72) * 0.2} fill="#ffffff">
-        {content.venue}
-      </text>
-    </Artboard>
-  );
-}
-
-/* ======================================================================= */
-/* 23 — CHROME                                                             */
-/* ======================================================================= */
-
-const chromePaint: WordStyle['paint'] = (_f, accent, id) => ({
-  defs: (
-    <defs>
-      <linearGradient id={id + 'ch'} x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#ffffff" />
-        <stop offset="0.38" stopColor="#c9ced8" />
-        <stop offset="0.5" stopColor="#3a3f4a" />
-        <stop offset="0.53" stopColor={mix(accent, '#ffffff', 0.55)} />
-        <stop offset="0.75" stopColor="#f4f6fb" />
-        <stop offset="1" stopColor="#8a909c" />
-      </linearGradient>
-    </defs>
-  ),
-  props: { fill: `url(#${id}ch)`, stroke: '#ffffff', strokeWidth: 1.4, strokeOpacity: 0.7 },
-});
-const chromeStyle: WordStyle = {
-  family: "'Anton'",
-  css: FONT.condensed,
-  weight: 400,
-  tracking: 0.02,
-  paint: chromePaint,
-  Symbol: ({ tone }) => {
-    const id = useUid('chs');
-    const p = chromePaint!(tone.fg, tone.accent, id, 260);
-    return (
-      <g>
-        {p.defs}
-        <text x={150} y={262} textAnchor="middle" fontFamily={FONT.condensed} fontSize={300} {...p.props}>
-          ?
-        </text>
-        <Sparkle x={236} y={70} s={26} />
-      </g>
-    );
-  },
-};
-
-function ChromePoster({ content, settings, colors, format, photoSrc }: PosterProps) {
-  const sq = format === 'square';
-  const W = 1000;
-  const H = sq ? 1000 : 1500;
-  const hue = baseHue(colors, settings);
-  const id = useUid('chr');
-  const r = rng(5);
-  const sparks = Array.from({ length: 14 }, () => ({ x: r() * W, y: r() * H * 0.8, s: 6 + r() * 22 }));
-  return (
-    <Artboard format={format} colors={{ ...colors, bg: '#050506' }} texture={settings.texture * 0.5} label={`${content.brand} — chrome`}>
-      <Blobs w={W} h={H} colors={[hue, mix(hue, '#ffffff', 0.4), '#1a1a40']} seed={9} blur={110} />
-      <rect width={W} height={H} fill="#000" opacity={0.35} />
-      <PhotoOverlay settings={settings} photoSrc={photoSrc} W={W} H={H} hue={hue} />
-      {sparks.map((s, i) => (
-        <Sparkle key={i} x={s.x} y={s.y} s={s.s} />
-      ))}
-      <Title st={chromeStyle} content={content} settings={settings} colors={colors} cx={W / 2} y={sq ? 90 : 170} maxW={sq ? 820 : 880} maxH={sq ? 300 : 420} />
-      <defs>
-        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#ffffff" />
-          <stop offset="0.5" stopColor="#9aa1ae" />
-          <stop offset="0.52" stopColor="#ffffff" />
-          <stop offset="1" stopColor="#c4c9d3" />
+        <linearGradient id={id + 'd'} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={mix(day, '#ffffff', 0.5)} />
+          <stop offset="1" stopColor={day} />
         </linearGradient>
+        <linearGradient id={id + 'n'} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={night} />
+          <stop offset="1" stopColor={mix(night, '#000000', 0.6)} />
+        </linearGradient>
+        <filter id={id + 'w'} x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.004 0.06" numOctaves={2} seed={4} />
+          <feDisplacementMap in="SourceGraphic" scale="22" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
       </defs>
-      <text x={W / 2} y={sq ? 520 : 720} textAnchor="middle" fontFamily={FONT.condensed} fontSize={sq ? 70 : 96} letterSpacing={4} fill={`url(#${id})`}>
-        {content.date}
+      <rect width={W} height={mid} fill={`url(#${id}d)`} />
+      <rect y={mid} width={W} height={H - mid} fill={`url(#${id}n)`} />
+      <PhotoLayer settings={settings} photoSrc={photoSrc} W={W} H={H} light={day} opacity={0.15} />
+      <g transform={`translate(0 ${(1 - settings.logoScale) * 120})`}>
+        <Facade W={W} base={base} line={mix(hue, '#141414', 0.75)} lights={mix(hue, '#141414', 0.6)} />
+        <g filter={`url(#${id}w)`} transform={`translate(0 ${mid + mid * 0.62}) scale(1 -0.62)`} opacity={0.9}>
+          <Facade W={W} base={base} line={mix(hue, '#ffffff', 0.3)} lights="#ffd27a" />
+        </g>
+      </g>
+      <rect x={0} y={mid - 2} width={W} height={4} fill={hue} />
+      <text x={W / 2} y={sq ? 80 : 110} textAnchor="middle" fontFamily={FONT.serif} fontWeight={600} fontSize={sq ? 32 : 42} letterSpacing={12} fill={mix(hue, '#141414', 0.8)}>
+        {(lines(content.signature)[0] ?? '').toUpperCase()}
       </text>
-      <text x={W / 2} y={sq ? 560 : 776} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={sq ? 18 : 22} letterSpacing={6} fill="#ffffff">
-        {content.venue}
+      <text x={W / 2} y={sq ? 120 : 160} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={sq ? 15 : 18} letterSpacing={5} fill={mix(hue, '#141414', 0.8)}>
+        {content.venue} · {content.date}
       </text>
-      <text x={W / 2} y={sq ? 640 : 900} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={sq ? 14 : 17} letterSpacing={4} fill={mix(hue, '#ffffff', 0.5)}>
-        {content.lineupTitle}
-      </text>
-      <Lineup content={content} cx={W / 2} y={sq ? 700 : 980} maxW={sq ? 760 : 820} size={sq ? 48 : 66} family="'Anton'" css={FONT.condensed} weight={400} gap={1.05} />
-      <text x={W / 2} y={H - (sq ? 50 : 90)} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={sq ? 13 : 16} letterSpacing={3} fill="#ffffff" opacity={0.85}>
-        {content.mentions || `${content.edition} · ${content.pillars}`}
+      <Title st={refletStyle} content={content} settings={settings.titleLayout === 'symbol' ? { ...settings, titleLayout: 'line' } : { ...settings, titleLayout: 'line', logoScale: 1 }} colors={colors} cx={W / 2} y={mid + (sq ? 30 : 40)} maxW={sq ? 760 : 840} maxH={sq ? 90 : 120} fg="#ffffff" />
+      <Lineup content={content} cx={W / 2} y={H - (sq ? 170 : 260)} maxW={sq ? 820 : 860} size={settings.infoLayout === 'split' ? (sq ? 36 : 54) : sq ? 28 : 42} family="'General Sans'" css={FONT.sans} weight={700} />
+      <text x={W / 2} y={H - (sq ? 30 : 56)} textAnchor="middle" fontFamily={FONT.sans} fontWeight={600} fontSize={sq ? 13 : 16} letterSpacing={3} fill="#ffffff" opacity={0.8}>
+        {(lines(content.signature)[2] ?? content.edition).toUpperCase()}
       </text>
     </Artboard>
   );
@@ -835,147 +857,148 @@ function ChromePoster({ content, settings, colors, format, photoSrc }: PosterPro
 /* Definitions                                                             */
 /* ======================================================================= */
 
-const typo = (title: string, css: string, weight: number, note: string, sample = 'UNE AUTRE ?'): ConceptDef['typography'] => [
-  { role: 'Titre', family: title, css, weight, sample, note },
+const typo = (title: string, css: string, weight: number, note: string, sample = 'UNE AUTRE ?', italic = false): ConceptDef['typography'] => [
+  { role: 'Titre', family: title, css, weight, italic, sample, note },
   { role: 'Line-up', family: 'General Sans', css: FONT.sans, weight: 700, sample: 'RAYHANE B2B KARIM SIALA', note: 'Noms en gras, centrés, lisibles en story.' },
-  { role: 'Infos', family: 'General Sans', css: FONT.sans, weight: 600, sample: '12 JUILLET 2025', note: 'Date et lieu immédiatement sous le titre.' },
+  { role: 'Infos', family: 'General Sans', css: FONT.sans, weight: 600, sample: '12 JUILLET 2025', note: 'Date et lieu juste sous le titre.' },
 ];
 const BASE = { paper: '#f4efe6', ink: '#050505' };
 
-export const glossy: ConceptDef = {
-  id: 'glossy',
+export const facettes: ConceptDef = {
+  id: 'facettes',
   index: '18',
-  name: 'Glossy',
-  short: 'Tubes 3D, flou, monochrome',
-  description: 'Une affiche de club « réelle » : des « ? » en tubes brillants flottent dans un champ flou monochrome, titre extra-large, line-up centré.',
+  name: 'Facettes',
+  short: 'Boule disco en forme de « ? »',
+  description: 'Une boule à facettes qui a la forme du « ? » : des centaines de petits miroirs, et leurs éclats de lumière projetés sur toute l’affiche.',
   rationale: [
-    'Le code des affiches qui tournent sur Instagram : un visuel 3D brillant en plein cadre, une seule couleur déclinée en profondeur, et toute l’information au centre.',
-    'Ici l’objet 3D, c’est le signe de la marque : des « ? » en tube laqué, nets ou flous selon leur profondeur. La couleur suit le réglage « couleur dominante » (rouge par défaut, mais vert, bleu… à chaque édition).',
-    'Hiérarchie de club : TITRE → date → lieu → LINE UP en gros → mentions pratiques en bas.',
+    'L’objet emblème du club, réinventé : la boule à facettes n’est plus une sphère, c’est le signe de la marque. Chaque miroir est calculé à partir du squelette du « ? ».',
+    'Les éclats lumineux débordent sur tout le fond, comme dans la salle quand la boule tourne. La couleur d’édition teinte la salle et certains miroirs.',
+    'Hiérarchie de club conservée : objet, titre, date et lieu, line-up en grand.',
   ],
   base: BASE,
   palette: [
-    { name: 'Rouge profond', hex: '#b5121b', role: 'Couleur d’édition' },
-    { name: 'Rouge clair', hex: '#e65a5f', role: 'Reflets' },
-    { name: 'Blanc', hex: '#ffffff', role: 'Texte' },
+    { name: 'Nuit teintée', hex: '#2a0a10', role: 'Fond' },
+    { name: 'Miroir', hex: '#e9ecf2', role: 'Facettes' },
+    { name: 'Couleur d’édition', hex: '#c8141e', role: 'Reflets' },
   ],
-  typography: typo('Syne ExtraBold', FONT.display, 800, 'Titre très large, comme les affiches de club.'),
-  defaults: { accent: '#b5121b', background: 'accent', titleLayout: 'line', logoScale: 1, texture: 0.25, photo: false, infoLayout: 'split', format: 'portrait' },
-  Logo: GlossyLogo,
-  Poster: GlossyPoster,
+  typography: typo('General Sans', FONT.sans, 600, 'Capitales espacées, sobres face à l’objet.'),
+  defaults: { accent: '#c8141e', background: 'accent', titleLayout: 'line', logoScale: 1, texture: 0.25, photo: false, infoLayout: 'split', format: 'portrait' },
+  Logo: makeLogo(facettesStyle),
+  Poster: FacettesPoster,
 };
 
-export const clubnight: ConceptDef = {
-  id: 'clubnight',
+export const bab: ConceptDef = {
+  id: 'bab',
   index: '19',
-  name: 'Club',
-  short: 'Plafond lumineux, sérif, foule',
-  description: 'L’intérieur du club : plafond de lumières, brume rouge, foule, lettres géantes floues derrière un titre sérif à caractère.',
+  name: 'Bab',
+  short: 'La porte cloutée de Sidi Bou Saïd',
+  description: 'La porte bleue de Sidi Bou Saïd, dont les clous dessinent un « ? ». Mur chaulé, bougainvillier, et une porte qu’on a envie de pousser.',
   rationale: [
-    'Inspiré des affiches de soirées en club : une photographie d’ambiance (ici entièrement générée — plafond d’ampoules en perspective, brume, silhouettes) et un titre sérif gras en minuscules.',
-    'Les lettres du nom flottent en grand, floues et dorées, comme projetées dans la salle.',
-    'Line-up en ordre alphabétique « A~Z » séparé par des tirets, date et lieu en sérif : la mise en page classique des soirées multi-DJ.',
+    'Un symbole que tout le monde reconnaît en Tunisie, utilisé d’une façon qu’on n’a jamais vue : les clous décoratifs de la porte forment le point d’interrogation de la marque.',
+    'Pousser la porte, c’est entrer dans « une autre » expérience — même lieu, autre passage.',
+    'Fond « noir » = la même porte la nuit, sous une lanterne ; la couleur d’édition change la couleur de la porte.',
   ],
   base: BASE,
   palette: [
-    { name: 'Rouge salle', hex: '#8a1414', role: 'Brume' },
-    { name: 'Ampoules', hex: '#ffe2b0', role: 'Lumières, lettres' },
-    { name: 'Noir', hex: '#0b0202', role: 'Foule, fond' },
+    { name: 'Bleu Sidi Bou', hex: '#1d5fa8', role: 'Porte' },
+    { name: 'Chaux', hex: '#f3efe6', role: 'Mur' },
+    { name: 'Bougainvillier', hex: '#d6337a', role: 'Fleurs' },
+    { name: 'Clous', hex: '#1a1b1e', role: 'Le « ? »' },
   ],
-  typography: typo('Gambetta Bold', FONT.gambetta, 700, 'Sérif gras en minuscules.', 'une autre ?'),
-  defaults: { accent: '#8a1414', background: 'accent', titleLayout: 'line', logoScale: 1, texture: 0.35, photo: false, infoLayout: 'split', format: 'portrait' },
-  Logo: makeLogo(clubStyle),
-  Poster: ClubPoster,
+  typography: typo('Gambetta', FONT.gambetta, 600, 'Capitales sérif espacées, comme une plaque gravée.'),
+  defaults: { accent: '#1d5fa8', background: 'paper', titleLayout: 'line', logoScale: 1, texture: 0.4, photo: false, infoLayout: 'split', format: 'portrait' },
+  Logo: makeLogo(babStyle),
+  Poster: BabPoster,
 };
 
-export const gourmand: ConceptDef = {
-  id: 'gourmand',
+export const machmoum: ConceptDef = {
+  id: 'machmoum',
   index: '20',
-  name: 'Gourmand',
-  short: 'Anneau sucré, lettres gonflées',
-  description: 'Un anneau 3D brillant et sucré sur un dégradé orange-rouge, des lettres crème toutes rondes : gourmand, solaire, très « été ».',
+  name: 'Machmoum',
+  short: 'Le « ? » en fleurs de jasmin',
+  description: 'Un machmoum géant : des fleurs de jasmin assemblées en point d’interrogation, blanches sur une nuit d’été profonde.',
   rationale: [
-    'Le cercle du logo devient un objet appétissant : un anneau laqué saupoudré de sucre, avec ses reflets, en plein centre.',
-    'Le titre en lettres « gonflées » (contour arrondi épais) passe devant l’objet, comme sur les affiches de soirées estivales.',
-    'Peu de texte, grosse émotion : nom du lieu en haut, line-up sur une ligne, date en bas.',
+    'Le jasmin, c’est l’odeur des nuits d’été tunisiennes. Ici les fleurs (pétales dessinés un à un) composent le « ? », avec un double flou derrière pour la profondeur.',
+    'Quelques pétales tombent hors champ : l’affiche a une atmosphère, pas seulement une information.',
+    'Titre en italique sérif, date espacée, line-up en grand en dessous.',
   ],
   base: BASE,
   palette: [
-    { name: 'Orange', hex: '#ff6a1a', role: 'Dégradé' },
-    { name: 'Rouge cerise', hex: '#c8141e', role: 'Anneau' },
-    { name: 'Crème', hex: CREAM, role: 'Lettres' },
+    { name: 'Nuit d’été', hex: '#0c0d14', role: 'Fond' },
+    { name: 'Jasmin', hex: '#ffffff', role: 'Fleurs' },
+    { name: 'Pistil', hex: '#e8d27a', role: 'Cœurs' },
   ],
-  typography: typo('Lettres gonflées', FONT.sans, 700, 'General Sans Bold + contour arrondi épais.', 'une autre ?'),
-  defaults: { accent: '#e8361a', background: 'accent', titleLayout: 'line', logoScale: 1, texture: 0.2, photo: false, infoLayout: 'split', format: 'portrait' },
-  Logo: GourmandLogo,
-  Poster: GourmandPoster,
+  typography: typo('Gambetta Italic', FONT.gambetta, 500, 'Italique en minuscules, délicat.', 'une autre ?', true),
+  defaults: { accent: '#2a3a6a', background: 'dark', titleLayout: 'line', logoScale: 1, texture: 0.3, photo: false, infoLayout: 'split', format: 'portrait' },
+  Logo: makeLogo(machmoumStyle),
+  Poster: MachmoumPoster,
 };
 
-export const sunset: ConceptDef = {
-  id: 'sunset',
+export const thermique: ConceptDef = {
+  id: 'thermique',
   index: '21',
-  name: 'Sunset',
-  short: 'Coucher de soleil, story',
-  description: 'Un coucher de soleil sur la mer, terrasse en silhouette, et l’information empilée au centre : la story de soirée sunset.',
+  name: 'Thermique',
+  short: 'La piste vue en caméra thermique',
+  description: 'La piste de danse vue d’en haut par une caméra thermique : la chaleur des corps, et au centre le point le plus chaud — en forme de « ? ».',
   rationale: [
-    'Le format story des soirées en plein air : ciel violet-orangé, nuages, soleil sur l’horizon et ses reflets sur l’eau — tout est généré.',
-    'Lecture verticale simple : signature → titre → date courte (12.07) → line-up avec détails entre crochets → lieu en capitales espacées → bouton.',
-    'La couleur dominante teinte le ciel : chaque édition peut avoir sa lumière.',
+    '« Mêmes gens », vus autrement : les danseurs deviennent des taches de chaleur ; la marque est la zone la plus brûlante de la salle.',
+    'Palette thermique (noir, violet, rouge, orange, jaune, blanc), viseur et échelle de température façon interface de caméra — très fort en story et en vidéo.',
+    'Totalement original dans le paysage des affiches de club, et pourtant immédiatement compréhensible.',
   ],
   base: BASE,
   palette: [
-    { name: 'Violet crépuscule', hex: '#3a2350', role: 'Haut du ciel' },
-    { name: 'Orange soleil', hex: '#ff8a3d', role: 'Horizon' },
-    { name: 'Blanc', hex: '#ffffff', role: 'Texte' },
+    { name: 'Froid', hex: '#3a0a5a', role: 'Fond de piste' },
+    { name: 'Chaud', hex: '#e8471a', role: 'Foule' },
+    { name: 'Brûlant', hex: '#fff4c8', role: 'Le « ? »' },
   ],
-  typography: typo('General Sans Bold', FONT.sans, 700, 'Grotesque grasse, simple et lisible.'),
-  defaults: { accent: '#c94f3a', background: 'accent', titleLayout: 'line', logoScale: 1, texture: 0.2, photo: false, infoLayout: 'split', format: 'portrait' },
-  Logo: makeLogo(sunsetStyle),
-  Poster: SunsetPoster,
+  typography: typo('IBM Plex Mono', FONT.mono, 500, 'Typographie d’interface de caméra.'),
+  defaults: { accent: '#e8471a', background: 'dark', titleLayout: 'line', logoScale: 1, texture: 0.3, photo: false, infoLayout: 'split', format: 'portrait' },
+  Logo: makeLogo(thermiqueStyle),
+  Poster: ThermiquePoster,
 };
 
-export const horizon: ConceptDef = {
-  id: 'horizon',
+export const bracelet: ConceptDef = {
+  id: 'bracelet',
   index: '22',
-  name: 'Horizon',
-  short: 'Mer, panneau, bandes',
-  description: 'La mer au coucher du soleil en fond, et un panneau central découpé en bandes : titre, line-up, signature, date en grand.',
+  name: 'Bracelet',
+  short: 'Le bracelet d’entrée, géant',
+  description: 'Le bracelet tissé qu’on porte au poignet, en géant : il s’enroule et se vrille à travers l’affiche, le nom imprimé dessus.',
   rationale: [
-    'Variante « post » du sunset : le fond est la mer, et un panneau rectangulaire montre une autre vue du même ciel, découpée en bandes plus ou moins sombres.',
-    'Chaque bande a son rôle : titre et noms en haut, manifeste au milieu, signature et date en bas — une grille qui reste identique d’une édition à l’autre.',
-    'Le symbole (quatre bandes) sert d’en-tête et d’avatar.',
+    'L’objet de la soirée elle-même : le bracelet d’entrée. Il devient le visuel principal, vrillé en 3D (recto en couleur d’édition, verso plus sombre), avec sa trame tissée et son fermoir.',
+    'Le texte imprimé suit le ruban : la marque se lit en mouvement.',
+    'Un visuel simple à décliner en vrai : bracelets, tote bags, sangles — l’affiche annonce le merch.',
   ],
   base: BASE,
   palette: [
-    { name: 'Mer cuivre', hex: '#7a3214', role: 'Fond' },
-    { name: 'Orange', hex: '#ff8a3d', role: 'Ciel' },
-    { name: 'Blanc', hex: '#ffffff', role: 'Texte' },
+    { name: 'Couleur d’édition', hex: '#d7261e', role: 'Ruban' },
+    { name: 'Écru', hex: '#f2eee6', role: 'Fond' },
+    { name: 'Métal', hex: '#d4d8de', role: 'Fermoir' },
   ],
-  typography: typo('General Sans Bold', FONT.sans, 700, 'Grotesque grasse, alignée à gauche dans le panneau.'),
-  defaults: { accent: '#d0552a', background: 'accent', titleLayout: 'line', logoScale: 1, texture: 0.2, photo: false, infoLayout: 'split', format: 'portrait' },
-  Logo: makeLogo(horizonStyle),
-  Poster: HorizonPoster,
+  typography: typo('Anton', FONT.condensed, 400, 'Condensée, comme imprimée sur une sangle.'),
+  defaults: { accent: '#d7261e', background: 'paper', titleLayout: 'line', logoScale: 1, texture: 0.3, photo: false, infoLayout: 'split', format: 'portrait' },
+  Logo: makeLogo(braceletStyle),
+  Poster: BraceletPoster,
 };
 
-export const chrome: ConceptDef = {
-  id: 'chrome',
+export const reflet: ConceptDef = {
+  id: 'reflet',
   index: '23',
-  name: 'Chrome',
-  short: 'Lettres chromées, étincelles',
-  description: 'Le grand classique des soirées : titre condensé en chrome miroir, étincelles, lumières colorées floues sur fond noir.',
+  name: 'Reflet',
+  short: 'Même lieu, deux fois',
+  description: 'Le lieu dessiné au trait le jour, et son reflet inversé la nuit, troublé comme dans l’eau : la phrase de la marque devenue image.',
   rationale: [
-    'Le style « chrome » est partout dans les affiches de soirées : lettres métalliques avec reflet de ciel et d’horizon, étoiles scintillantes.',
-    'Ici il reste maîtrisé : un seul effet (le chrome), des lumières douces à la couleur de l’édition, et une hiérarchie très claire.',
-    'Fonctionne aussi bien en affiche qu’en vidéo animée (les reflets peuvent glisser).',
+    '« Même lieu. Mêmes gens. Une autre expérience. » — en une image : la façade (arches, palmiers, guirlandes) en haut, de jour ; en bas, son reflet de nuit, lumières allumées, ondulé par l’eau.',
+    'Le titre se pose exactement sur la ligne de flottaison, entre les deux mondes.',
+    'Le dessin est générique (aucun lieu réel reproduit) et peut être redessiné d’après le vrai lieu de chaque édition.',
   ],
   base: BASE,
   palette: [
-    { name: 'Noir', hex: '#050506', role: 'Fond' },
-    { name: 'Chrome', hex: '#c9ced8', role: 'Titre, date' },
-    { name: 'Lumière rouge', hex: '#ff2a2a', role: 'Ambiance' },
+    { name: 'Jour', hex: '#f8ecd9', role: 'Haut' },
+    { name: 'Nuit', hex: '#0d0a14', role: 'Bas' },
+    { name: 'Guirlandes', hex: '#ffd27a', role: 'Lumières' },
   ],
-  typography: typo('Anton chromé', FONT.condensed, 400, 'Condensée, dégradé miroir.'),
-  defaults: { accent: '#ff2a2a', background: 'accent', titleLayout: 'stacked', logoScale: 1, texture: 0.2, photo: false, infoLayout: 'split', format: 'portrait' },
-  Logo: makeLogo(chromeStyle),
-  Poster: ChromePoster,
+  typography: typo('Cormorant Garamond', FONT.serif, 600, 'Capitales sérif espacées sur la ligne d’horizon.'),
+  defaults: { accent: '#c46a2a', background: 'paper', titleLayout: 'line', logoScale: 1, texture: 0.3, photo: false, infoLayout: 'split', format: 'portrait' },
+  Logo: makeLogo(refletStyle),
+  Poster: RefletPoster,
 };

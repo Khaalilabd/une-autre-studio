@@ -21,15 +21,15 @@ Sur un autre ordinateur : `git clone …`, puis `npm install` et `npm run dev`. 
 | N° | Piste | | N° | Piste | | N° | Piste |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 01 | Ink / Gesture | | 09 | Swiss Rhythm | | 17 | Sticker |
-| 02 | Red Signal | | 10 | Collage / Zine | | 18 | Glossy |
-| 03 | Editorial Luxe | | 11 | Onde / Fréquence | | 19 | Club |
-| 04 | Brutalist Culture | | 12 | Guilloché / Club | | 20 | Gourmand |
-| 05 | Abstract Question | | 13 | Anneau | | 21 | Sunset |
-| 06 | Mediterranean Nocturne | | 14 | Loco Néon | | 22 | Horizon |
-| 07 | Riso / Halftone | | 15 | Vinyle | | 23 | Chrome |
+| 02 | Red Signal | | 10 | Collage / Zine | | 18 | Facettes |
+| 03 | Editorial Luxe | | 11 | Onde / Fréquence | | 19 | Bab |
+| 04 | Brutalist Culture | | 12 | Guilloché / Club | | 20 | Machmoum |
+| 05 | Abstract Question | | 13 | Anneau | | 21 | Thermique |
+| 06 | Mediterranean Nocturne | | 14 | Loco Néon | | 22 | Bracelet |
+| 07 | Riso / Halftone | | 15 | Vinyle | | 23 | Reflet |
 | 08 | Néon | | 16 | Écho | | | |
 
-Les pistes 13–17 dérivent du logo existant (lettres creuses en anneau) ; les pistes 18–23 reprennent les codes des affiches de club « réelles » (visuel plein cadre, hiérarchie centrée, line-up en gros).
+Les pistes 13–17 dérivent du logo existant (lettres creuses en anneau) ; les pistes 18–23 fonctionnent comme de vraies affiches de club (un objet fort plein cadre, hiérarchie centrée, line-up en gros) avec des objets propres à la marque et à la Tunisie (boule à facettes « ? », porte de Sidi Bou Saïd, machmoum, caméra thermique, bracelet, reflet).
 
 ## Structure
 

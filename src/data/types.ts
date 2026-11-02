@@ -18,12 +18,12 @@ export type ConceptId =
   | 'vinyle'
   | 'echo'
   | 'sticker'
-  | 'glossy'
-  | 'clubnight'
-  | 'gourmand'
-  | 'sunset'
-  | 'horizon'
-  | 'chrome';
+  | 'facettes'
+  | 'bab'
+  | 'machmoum'
+  | 'thermique'
+  | 'bracelet'
+  | 'reflet';
 
 export interface LineupSlot {
   id: string;
