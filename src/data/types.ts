@@ -52,6 +52,7 @@ export type ConceptId =
   | 'origami'
   | 'ballon'
   | 'rubanrouge'
+  | 'rubanrougefond'
   | 'neonlogo'
   | 'tunnel'
   | 'medaille'

@@ -1194,6 +1194,41 @@ export const rubanorbite = rubanVariant('rubanorbite', '60', 'orbit', 'Ruban · 
 export const rubanhalo = rubanVariant('rubanhalo', '61', 'halo', 'Ruban · Halo', 'Le « ? » au centre du logo qui tourne', 'Ruban, posé au centre d’un très grand anneau UNE AUTRE ? — le vrai logo — qui tourne lentement derrière la sculpture.', 'Le « ? » sculpté complète le logo : l’anneau dit UNE AUTRE, la sculpture répond « ? ». Rotation lente, presque imperceptible, très élégante.');
 export const rubansceau = rubanVariant('rubansceau', '62', 'seal', 'Ruban · Sceau', 'Ruban, signé du logo', 'Ruban sans rien changer, sauf la signature : le badge en bas à gauche devient le vrai logo en anneau, qui tourne.', 'La version la plus discrète : l’affiche que vous aimez, avec l’identité qui tourne en bas comme un sceau.');
 
+
+// Variante personnalisée avec fond rouge et réglages spécifiques  
+const rubanRougeFondVariant = (id: ConceptDef['id'], index: string, name: string, short: string): ConceptDef => ({
+  ...ruban,
+  id,
+  index,
+  series: 'rubanrougefond',
+  name,
+  short,
+  description: 'Ruban avec fond rouge intense, logo en ligne, texture visible et badge tournant.',
+  rationale: ['Ruban tel quel : le « ? » sculpté qui se froisse et redevient lisse, avec un fond rouge profond au lieu du bleu nuit.', 'Le sceau en bas à gauche est le vrai logo en anneau, qui tourne lentement : chaque affiche est signée UNE AUTRE ?.', 'Version chaleureuse et intense, parfaite pour une ambiance club méditerranéenne.'],
+  palette: [
+    { name: 'Rouge profond', hex: '#83391B', role: 'Fond' },
+    { name: 'Rouge UNE AUTRE', hex: '#ff1f1f', role: 'Logo, anneau' },
+    { name: 'Argent', hex: '#f2f5ff', role: 'Matière, texte' },
+  ],
+  defaults: { 
+    accent: '#83391B', 
+    background: 'accent', 
+    titleLayout: 'line', 
+    logoScale: 0.9, 
+    texture: 0.35, 
+    photo: false, 
+    infoLayout: 'split', 
+    format: 'portrait',
+    badgeVisible: true,
+    badgeScale: 1,
+    badgeRotationSpeed: 20
+  },
+  Logo: ruban.Logo,
+  Poster: makePoster({ ...RUBAN, name: name.toLowerCase(), ring: 'seal' }),
+});
+
+export const rubanrougefond: ConceptDef = rubanRougeFondVariant('rubanrougefond', '63', 'Ruban · Rouge', 'Ruban avec fond rouge intense');
+
 export const mercure: ConceptDef = {
   id: 'mercure',
   index: '25',

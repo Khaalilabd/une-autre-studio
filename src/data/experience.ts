@@ -52,6 +52,7 @@ export const CHAPTERS: Record<ConceptId, { title: string[]; tagline: string; tin
   origami: { title: ['Origami.'], tagline: 'Plier autrement.', tint: ['#4a3300', '#0c0800'], rim: '#f2a900' },
   ballon: { title: ['Ballon.'], tagline: 'Vous êtes invités.', tint: ['#4a0b28', '#0c0207'], rim: '#ff6fae' },
   rubanrouge: { title: ['Ruban', 'rouge.'], tagline: 'Le logo prend matière.', tint: ['#3a0508', '#080102'], rim: '#ff1f1f' },
+  rubanrougefond: { title: ['Ruban', 'Fond Rouge.'], tagline: 'Version rouge intense.', tint: ['#3a0508', '#080102'], rim: '#ff1f1f' },
   neonlogo: { title: ['Néon.'], tagline: 'Allumé.', tint: ['#2a0606', '#060101'], rim: '#ff1f1f' },
   tunnel: { title: ['Tunnel.'], tagline: 'Une autre, à l\'infini.', tint: ['#2a0606', '#060101'], rim: '#ff1f1f' },
   medaille: { title: ['Médaille.'], tagline: 'On la garde au poignet.', tint: ['#2a0606', '#060101'], rim: '#ff8f8f' },

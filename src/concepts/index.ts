@@ -9,7 +9,7 @@ import { ink } from './ink';
 import { live1, live2, live3, live4, live5, rubanhalo3d } from './live3d';
 import { medaille, neonlogo, orbite, rubanrouge, tunnel } from './logo';
 import { harissa, lumiere, menthe, nuitrose, soleil } from './main';
-import { corail, mercure, noeud, ruban, rubanorbite, rubansceau, souffle } from './matiere';
+import { corail, mercure, noeud, ruban, rubanorbite, rubanrougefond, rubansceau, souffle } from './matiere';
 import { eclipse, ombre, relief, remplissage, verre } from './signe';
 import { ballon, bulle, glacon, gobo, origami } from './signe2';
 import { anamorphose, censure, motscroises, motsmeles, phrase, point } from './regard';
@@ -23,7 +23,7 @@ import { signal } from './signal';
 import { swiss } from './swiss';
 
 /** Add a new creative direction by writing one config + Logo + Poster and listing it here. */
-export const CONCEPTS: ConceptDef[] = [ink, signal, editorial, brutalist, question, nocturne, riso, neon, swiss, collage, onde, club, anneau, loco, vinyle, echo, sticker, facettes, bab, machmoum, thermique, bracelet, reflet, ruban, mercure, corail, noeud, souffle, anamorphose, motscroises, motsmeles, phrase, point, censure, lumiere, harissa, nuitrose, menthe, soleil, essaie, relief, eclipse, verre, remplissage, ombre, gobo, glacon, bulle, origami, ballon, rubanrouge, neonlogo, tunnel, medaille, orbite, rubanorbite, rubanhalo3d, rubansceau, live1, live2, live3, live4, live5];
+export const CONCEPTS: ConceptDef[] = [ink, signal, editorial, brutalist, question, nocturne, riso, neon, swiss, collage, onde, club, anneau, loco, vinyle, echo, sticker, facettes, bab, machmoum, thermique, bracelet, reflet, ruban, mercure, corail, noeud, souffle, anamorphose, motscroises, motsmeles, phrase, point, censure, lumiere, harissa, nuitrose, menthe, soleil, essaie, relief, eclipse, verre, remplissage, ombre, gobo, glacon, bulle, origami, ballon, rubanrouge, rubanrougefond, neonlogo, tunnel, medaille, orbite, rubanorbite, rubanhalo3d, rubansceau, live1, live2, live3, live4, live5];
 
 /** Special series, newest first; each gets its own block on the table and an animated sheet. */
 export const SERIES = [
