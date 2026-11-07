@@ -6,3 +6,9 @@ dist
 
 # Rendered demo videos are large deliverables — share them separately
 demo/
+
+# macOS system files
+._*
+.DS_Store
+.AppleDouble
+.LSOverride

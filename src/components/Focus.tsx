@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { CONCEPTS } from '../concepts';
+import { CONCEPTS, SERIES } from '../concepts';
 import type { ConceptDef, LogoVariant } from '../data/types';
-import { SHEETS, useStudio, type Route, type Sheet } from '../state/store';
+import { download, slug, toSvgDocument } from '../lib/exporter';
+import { sheetsFor, useStudio, type Route, type Sheet } from '../state/store';
 import { Applications, LogoTests, PhoneMock } from './Applications';
-import { LogoArt, PosterArt, useConceptColors } from './Artwork';
+import { LogoArt, PosterArt, posterElement, useConceptColors } from './Artwork';
 import { ContentEditor, CreativeControls } from './Editor';
 import { useExport } from './ExportDialog';
 import { ExportPanel, useJobs } from './ExportPanel';
@@ -15,6 +16,7 @@ type Tool = 'create' | 'content' | 'export';
 const SHEET_LABEL: Record<Sheet, string> = {
   affiche: 'Affiche 2:3',
   carre: 'Carré 1:1',
+  anime: 'Affiche animée',
   logos: 'Logos',
   tests: 'Tests',
   applications: 'Applications',
@@ -32,8 +34,14 @@ const isTyping = (e: KeyboardEvent) => {
   return t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName);
 };
 
-export function Focus({ def, sheet = 'affiche', go }: { def: ConceptDef; sheet?: Sheet; go: (r: Route) => void }) {
-  const { settings, favorites, compare, toggleFavorite, toggleCompare } = useStudio();
+export function Focus({ def, sheet: asked = 'affiche', go }: { def: ConceptDef; sheet?: Sheet; go: (r: Route) => void }) {
+  const { content, settings, photo, favorites, compare, toggleFavorite, toggleCompare } = useStudio();
+  const SHEETS = sheetsFor(def);
+  const sheet = SHEETS.includes(asked) ? asked : 'affiche';
+  const saveAnimated = async (format: 'portrait' | 'square') => {
+    const svg = await toSvgDocument(posterElement(def, content, s, photo, format, true));
+    download(svg, `${slug(content.brand)}_${def.index}-${def.id}_affiche-animee-${format === 'portrait' ? '2x3' : '1x1'}.svg`);
+  };
   const [tool, setTool] = useState<Tool | null>(null);
   const s = settings[def.id];
   const colors = useConceptColors(def);
@@ -43,7 +51,7 @@ export function Focus({ def, sheet = 'affiche', go }: { def: ConceptDef; sheet?:
   const fav = favorites.includes(def.id);
   const cmp = compare.includes(def.id);
   const toSheet = (sh: Sheet) => go({ name: 'concept', id: def.id, sheet: sh });
-  const toConcept = (k: number) => go({ name: 'concept', id: CONCEPTS[(k + CONCEPTS.length) % CONCEPTS.length].id, sheet });
+  const toConcept = (k: number) => go({ name: 'concept', id: CONCEPTS[(k + CONCEPTS.length) % CONCEPTS.length].id, sheet: asked });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -88,7 +96,7 @@ export function Focus({ def, sheet = 'affiche', go }: { def: ConceptDef; sheet?:
         <div className="anno-block">
           <Note k="Fond" v={{ paper: 'Ivoire', dark: 'Noir', accent: 'Couleur' }[s.background]} />
           <Note k="Accent" v={s.accent.toUpperCase()} />
-          <Note k="Titre" v={{ stacked: 'Empilé', line: 'En ligne', symbol: 'Symbole' }[s.titleLayout]} />
+          <Note k="Titre" v={{ stacked: 'Empilé', line: 'En ligne', symbol: 'Symbole', badge: 'Logo tournant' }[s.titleLayout]} />
           <Note k="Logo" v={`${Math.round(s.logoScale * 100)} %`} />
           <Note k="Grain" v={`${Math.round(s.texture * 100)} %`} />
           <Note k="Photo" v={s.photo ? 'Oui' : 'Non'} />
@@ -166,6 +174,36 @@ export function Focus({ def, sheet = 'affiche', go }: { def: ConceptDef; sheet?:
                   Exporter ce tirage
                 </button>
                 <PhoneMock def={def} format="square" />
+              </div>
+            </div>
+          )}
+
+          {sheet === 'anime' && def.Live && (
+            <div className="sheet-live">
+              <def.Live content={content} settings={s} />
+            </div>
+          )}
+
+          {sheet === 'anime' && !def.Live && (
+            <div className="sheet-poster">
+              <Print dims={{ w: '1000 px', h: '1500 px' }} className="hero-print">
+                <PosterArt def={def} format="portrait" animated />
+              </Print>
+              <div className="sheet-side">
+                <Note k="Série" v={SERIES.find((x) => x.id === def.series)?.name ?? ''} />
+                <Note k="Mouvement" v="Boucle continue" />
+                <Note k="Texte" v="Fixe" />
+                <Note k="Fichier" v="SVG animé (SMIL)" />
+                <button className="tbtn solid" onClick={() => saveAnimated('portrait')}>
+                  Télécharger 2:3 animé
+                </button>
+                <button className="tbtn" onClick={() => saveAnimated('square')}>
+                  Télécharger 1:1 animé
+                </button>
+                <div className="anim-square">
+                  <PosterArt def={def} format="square" animated />
+                </div>
+                <small className="anim-hint">Le SVG s’ouvre et s’anime dans n’importe quel navigateur. Pour Instagram, enregistrez-le en vidéo (Cmd + Maj + 5).</small>
               </div>
             </div>
           )}

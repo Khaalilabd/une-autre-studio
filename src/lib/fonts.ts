@@ -15,9 +15,13 @@ import serif300i from '@fontsource/cormorant-garamond/files/cormorant-garamond-l
 import serif400i from '@fontsource/cormorant-garamond/files/cormorant-garamond-latin-400-italic.woff2?url';
 import serif500i from '@fontsource/cormorant-garamond/files/cormorant-garamond-latin-500-italic.woff2?url';
 import anton400 from '@fontsource/anton/files/anton-latin-400-normal.woff2?url';
+import fredoka600 from '@fontsource/fredoka/files/fredoka-latin-600-normal.woff2?url';
+import fredoka700 from '@fontsource/fredoka/files/fredoka-latin-700-normal.woff2?url';
 import syne500 from '@fontsource/syne/files/syne-latin-500-normal.woff2?url';
 import syne700 from '@fontsource/syne/files/syne-latin-700-normal.woff2?url';
 import syne800 from '@fontsource/syne/files/syne-latin-800-normal.woff2?url';
+import bagel400 from '@fontsource/bagel-fat-one/files/bagel-fat-one-latin-400-normal.woff2?url';
+import script400 from '@fontsource/mrs-saint-delafield/files/mrs-saint-delafield-latin-400-normal.woff2?url';
 import generalSans from '../assets/fonts/GeneralSans-Variable.woff2?url';
 import generalSansItalic from '../assets/fonts/GeneralSans-VariableItalic.woff2?url';
 import gambetta from '../assets/fonts/Gambetta-Variable.woff2?url';
@@ -32,6 +36,8 @@ interface Face {
 }
 
 const FACES: Face[] = [
+  { family: 'Fredoka', weight: 600, style: 'normal', url: fredoka600 },
+  { family: 'Fredoka', weight: 700, style: 'normal', url: fredoka700 },
   { family: 'Inter', weight: 400, style: 'normal', url: inter400 },
   { family: 'Inter', weight: 500, style: 'normal', url: inter500 },
   { family: 'Inter', weight: 600, style: 'normal', url: inter600 },
@@ -50,6 +56,8 @@ const FACES: Face[] = [
   { family: 'Syne', weight: 800, style: 'normal', url: syne800 },
   { family: 'General Sans', weight: '200 700', style: 'normal', url: generalSans },
   { family: 'General Sans', weight: '200 700', style: 'italic', url: generalSansItalic },
+  { family: 'Bagel Fat One', weight: 400, style: 'normal', url: bagel400 },
+  { family: 'Mrs Saint Delafield', weight: 400, style: 'normal', url: script400 },
   { family: 'Gambetta', weight: '300 700', style: 'normal', url: gambetta },
   { family: 'Gambetta', weight: '300 700', style: 'italic', url: gambettaItalic },
 ];
@@ -63,6 +71,9 @@ export const FONT = {
   display: "'Syne', 'Inter', sans-serif",
   sans: "'General Sans', 'Inter', sans-serif",
   gambetta: "'Gambetta', Georgia, serif",
+  round: "'Fredoka', 'General Sans', sans-serif",
+  puff: "'Bagel Fat One', 'Fredoka', sans-serif",
+  script: "'Mrs Saint Delafield', 'Gambetta', cursive",
 };
 
 const faceRule = (f: Face, src: string) =>

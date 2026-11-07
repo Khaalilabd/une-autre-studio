@@ -4,9 +4,9 @@ import type { ConceptDef, CreativeSettings, EventContent, LogoVariant, PosterFor
 import { useStudio } from '../state/store';
 
 /** Pure element builders — used both for on-screen rendering and for export. */
-export function posterElement(def: ConceptDef, content: EventContent, settings: CreativeSettings, photo: string | null, format?: PosterFormat): ReactElement {
+export function posterElement(def: ConceptDef, content: EventContent, settings: CreativeSettings, photo: string | null, format?: PosterFormat, animated?: boolean): ReactElement {
   const colors = resolveColors(def, settings);
-  return <def.Poster content={content} settings={settings} colors={colors} format={format ?? settings.format} photoSrc={photo} />;
+  return <def.Poster content={content} settings={settings} colors={colors} format={format ?? settings.format} photoSrc={photo} animated={animated} />;
 }
 
 export function logoElement(def: ConceptDef, variant: LogoVariant, brand: string, tone: Tone, layout?: 'stacked' | 'line'): ReactElement {
@@ -18,10 +18,10 @@ export function useConceptColors(def: ConceptDef) {
   return resolveColors(def, settings[def.id]);
 }
 
-export function PosterArt({ def, format, className }: { def: ConceptDef; format?: PosterFormat; className?: string }) {
+export function PosterArt({ def, format, className, animated }: { def: ConceptDef; format?: PosterFormat; className?: string; animated?: boolean }) {
   const { content, settings, photo } = useStudio();
   const f = format ?? settings[def.id].format;
-  return <div className={`art poster ${f} ${className ?? ''}`}>{posterElement(def, content, settings[def.id], photo, f)}</div>;
+  return <div className={`art poster ${f} ${className ?? ''}`}>{posterElement(def, content, settings[def.id], photo, f, animated)}</div>;
 }
 
 export function LogoArt({ def, variant, layout, tone, bg, className }: { def: ConceptDef; variant: LogoVariant; layout?: 'stacked' | 'line'; tone?: Tone; bg?: string; className?: string }) {

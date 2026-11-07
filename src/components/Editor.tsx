@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import type { ConceptDef, CreativeSettings, LineupSlot } from '../data/types';
 import { useStudio } from '../state/store';
 
@@ -37,8 +37,14 @@ export function ContentEditor() {
         <Field label="Édition" value={content.edition} onChange={(edition) => setContent({ edition })} />
         <Field label="N°" value={content.editionNumber} onChange={(editionNumber) => setContent({ editionNumber })} />
       </div>
-      <Field label="Lieu" value={content.venue} onChange={(venue) => setContent({ venue })} />
+        <label className="field">
+          <span>Couleur de l’édition</span>
+          <input type="color" value={content.editionAccent} onChange={(e) => setContent({ editionAccent: e.target.value })} />
+          <small>La palette de cette soirée se décline sur l’affiche, le feed et les stories. Bleu outremer pour la première édition.</small>
+        </label>
+        <Field label="Lieu" value={content.venue} onChange={(venue) => setContent({ venue })} />
       <Field label="Date" value={content.date} onChange={(date) => setContent({ date })} hint="Le premier mot (le jour) est mis en exergue sur certaines affiches." />
+      <Field label="Horaires" value={content.hours} onChange={(hours) => setContent({ hours })} hint="Exemple à remplacer par les vrais horaires." />
       <Field label="Titre de la programmation" value={content.lineupTitle} onChange={(lineupTitle) => setContent({ lineupTitle })} />
       <fieldset className="lineup-editor">
         <legend>Artistes</legend>
@@ -119,9 +125,27 @@ export function CreativeControls({ def }: { def: ConceptDef }) {
   const set = (patch: Partial<CreativeSettings>) => setSettings(def.id, patch);
   const fileRef = useRef<HTMLInputElement>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [showSaved, setShowSaved] = useState(false);
+
+  // Show "Saved" indicator when settings change
+  useEffect(() => {
+    setShowSaved(true);
+    const timer = setTimeout(() => setShowSaved(false), 2000);
+    return () => clearTimeout(timer);
+  }, [s]);
 
   return (
     <div className="panel-section">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', padding: '8px 12px', backgroundColor: showSaved ? '#10b981' : '#f3f4f6', borderRadius: '6px', transition: 'all 0.3s' }}>
+        <span style={{ fontSize: '14px', fontWeight: 600, color: showSaved ? '#fff' : '#6b7280' }}>
+          {showSaved ? '✓ Modifications sauvegardées !' : '⚙️ Réglages de l\'affiche'}
+        </span>
+        {storageWarning && (
+          <span style={{ fontSize: '12px', color: '#ef4444', fontWeight: 500 }}>
+            ⚠️ Attention: Sauvegarde limitée
+          </span>
+        )}
+      </div>
       <div className="field">
         <span>Couleur dominante</span>
         <div className="swatches">
@@ -131,6 +155,12 @@ export function CreativeControls({ def }: { def: ConceptDef }) {
           <input type="color" value={s.accent} onChange={(e) => set({ accent: e.target.value })} aria-label="Couleur personnalisée" />
         </div>
       </div>
+      {def.id === 'lumiere' && (
+        <label className="field">
+          <span>Couleur du texte</span>
+          <input type="color" value={s.textColor ?? '#ffffff'} onChange={(e) => set({ textColor: e.target.value })} />
+        </label>
+      )}
       <Segmented
         label="Fond"
         value={s.background}
@@ -149,14 +179,474 @@ export function CreativeControls({ def }: { def: ConceptDef }) {
           { value: 'stacked', label: 'Empilé' },
           { value: 'line', label: 'En ligne' },
           { value: 'symbol', label: 'Symbole' },
+          { value: 'badge', label: 'Logo tournant' },
         ]}
       />
+      {(s.titleLayout === 'stacked' || s.titleLayout === 'line' || s.titleLayout === 'symbol') && (
+        <div className="field">
+          <span>Police d'écriture du logo (titre en haut)</span>
+          <select 
+            value={s.logoFont ?? 'sans'} 
+            onChange={(e) => set({ logoFont: e.target.value })}
+            style={{ 
+              width: '100%', 
+              padding: '10px 12px', 
+              marginTop: '6px', 
+              borderRadius: '6px', 
+              border: '1.5px solid #d1d5db',
+              fontSize: '14px',
+              backgroundColor: '#fff',
+              cursor: 'pointer'
+            }}
+          >
+            <optgroup label="★ À MAIN LEVÉE - Style Manuscrit">
+              <option value="script">Mrs Saint Delafield - Cursive élégante</option>
+              <option value="gambetta">Gambetta Italic - Serif manuscrite</option>
+            </optgroup>
+            <optgroup label="✦ MODERNE & LUMINEUSE - Grasses & Impactantes">
+              <option value="sans">General Sans - Grotesque (défaut)</option>
+              <option value="display">Syne - Display contemporain</option>
+              <option value="puff">Bagel Fat One - Gonflée & joyeuse</option>
+              <option value="condensed">Anton - Condensée & forte</option>
+            </optgroup>
+            <optgroup label="○ DOUCE & SOLAIRE - Arrondies & Chaleureuses">
+              <option value="round">Fredoka - Arrondie & amicale</option>
+            </optgroup>
+            <optgroup label="◇ CLASSIQUE & RAFFINÉE - Serif & Élégance">
+              <option value="serif">Cormorant Garamond - Classique</option>
+            </optgroup>
+            <optgroup label="▪ TECHNIQUE - Monospace">
+              <option value="mono">IBM Plex Mono - Code & précision</option>
+            </optgroup>
+          </select>
+          <small style={{ display: 'block', marginTop: '8px', lineHeight: '1.4', color: '#6b7280' }}>
+            🎨 Change la police du logo/titre en haut de l'affiche <strong>"UNE AUTRE ?"</strong>. 
+            L'effet "gonflé" reste, seule la police change. Essayez Script ou Gambetta pour un style manuscrit !
+          </small>
+        </div>
+      )}
+      <div className="field">
+        <span>Police d'écriture du texte principal</span>
+        <select 
+          value={s.titleFont ?? 'sans'} 
+          onChange={(e) => set({ titleFont: e.target.value })}
+          style={{ 
+            width: '100%', 
+            padding: '10px 12px', 
+            marginTop: '6px', 
+            borderRadius: '6px', 
+            border: '1.5px solid #d1d5db',
+            fontSize: '14px',
+            backgroundColor: '#fff',
+            cursor: 'pointer'
+          }}
+        >
+          <optgroup label="★ À MAIN LEVÉE - Style Manuscrit">
+            <option value="script">Mrs Saint Delafield - Cursive élégante</option>
+            <option value="gambetta">Gambetta Italic - Serif manuscrite</option>
+          </optgroup>
+          <optgroup label="✦ MODERNE & LUMINEUSE - Grasses & Impactantes">
+            <option value="sans">General Sans - Grotesque (défaut)</option>
+            <option value="display">Syne - Display contemporain</option>
+            <option value="puff">Bagel Fat One - Gonflée & joyeuse</option>
+            <option value="condensed">Anton - Condensée & forte</option>
+          </optgroup>
+          <optgroup label="○ DOUCE & SOLAIRE - Arrondies & Chaleureuses">
+            <option value="round">Fredoka - Arrondie & amicale</option>
+          </optgroup>
+          <optgroup label="◇ CLASSIQUE & RAFFINÉE - Serif & Élégance">
+            <option value="serif">Cormorant Garamond - Classique</option>
+          </optgroup>
+          <optgroup label="▪ TECHNIQUE - Monospace">
+            <option value="mono">IBM Plex Mono - Code & précision</option>
+          </optgroup>
+        </select>
+        <small style={{ display: 'block', marginTop: '8px', lineHeight: '1.4', color: '#6b7280' }}>
+          💡 <strong>Affecte :</strong> Les noms des artistes (lineup), le titre en haut, et toutes les informations de l'événement. 
+          Pour un style manuscrit inspiré de <em>Lumière</em>, <em>Soleil</em>, <em>Menthe</em>, essayez Mrs Saint Delafield ou Gambetta.
+        </small>
+      </div>
+      <div className="field" style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px', marginTop: '16px' }}>
+        <span>✨ Style écriture à la main (comme Lumière)</span>
+        <label className="check">
+          <input 
+            type="checkbox" 
+            checked={s.useHandDrawn ?? false} 
+            onChange={(e) => set({ useHandDrawn: e.target.checked })} 
+          />
+          <span>Activer l'écriture manuscrite animée</span>
+        </label>
+        <small style={{ display: 'block', marginTop: '8px', lineHeight: '1.4', color: '#6b7280' }}>
+          🎨 Transforme <strong>TOUT</strong> en lettres tracées à la main qui dansent et brillent : 
+          le <strong>logo "UNE AUTRE ?"</strong> en haut + tous les textes (artistes, date, lieu...).
+          Chaque lettre est redessinée avec un tremblement naturel et s'anime en vague.
+          Style 100% <em>Lumière</em>, <em>Soleil</em>, <em>Menthe</em> !
+        </small>
+        {s.useHandDrawn && (
+          <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '6px' }}>
+            <label style={{ display: 'block', marginBottom: '8px' }}>
+              <small>Épaisseur du trait <output>{s.handWeight ?? 15}</output></small>
+              <input 
+                type="range" 
+                min={8} 
+                max={24} 
+                step={1} 
+                value={s.handWeight ?? 15} 
+                onChange={(e) => set({ handWeight: Number(e.target.value) })} 
+                style={{ width: '100%' }}
+              />
+              <small style={{ color: '#6b7280' }}>Affecte le logo ET le texte</small>
+            </label>
+            <label style={{ display: 'block', marginBottom: '8px' }}>
+              <small>Mouvement / danse <output>{((s.handBounce ?? 0.9) * 100).toFixed(0)}%</output></small>
+              <input 
+                type="range" 
+                min={0} 
+                max={1.5} 
+                step={0.1} 
+                value={s.handBounce ?? 0.9} 
+                onChange={(e) => set({ handBounce: Number(e.target.value) })} 
+                style={{ width: '100%' }}
+              />
+              <small style={{ color: '#6b7280' }}>Plus haut = animation plus expressive</small>
+            </label>
+            <label style={{ display: 'block' }}>
+              <small>Tremblement naturel <output>{(s.handTremor ?? 1.6).toFixed(1)}</output></small>
+              <input 
+                type="range" 
+                min={0.5} 
+                max={3} 
+                step={0.1} 
+                value={s.handTremor ?? 1.6} 
+                onChange={(e) => set({ handTremor: Number(e.target.value) })} 
+                style={{ width: '100%' }}
+              />
+              <small style={{ color: '#6b7280' }}>Donne cet aspect organique "fait main"</small>
+            </label>
+          </div>
+        )}
+      </div>
       <label className="field">
         <span>
           Taille du logo <output>{Math.round(s.logoScale * 100)} %</output>
         </span>
         <input type="range" min={0.6} max={1.3} step={0.02} value={s.logoScale} onChange={(e) => set({ logoScale: Number(e.target.value) })} />
       </label>
+      <div className="field">
+        <span>🔄 Rotation du logo (tourne sur lui-même)</span>
+        <label className="check">
+          <input 
+            type="checkbox" 
+            checked={s.logoSpin ?? false} 
+            onChange={(e) => set({ logoSpin: e.target.checked })} 
+          />
+          <span>Faire tourner le logo en continu</span>
+        </label>
+        {s.logoSpin && (
+          <div style={{ marginTop: '8px' }}>
+            <label>
+              <small>Vitesse de rotation <output>{s.logoSpinSpeed ?? 20}s</output></small>
+              <input 
+                type="range" 
+                min={5} 
+                max={60} 
+                step={1} 
+                value={s.logoSpinSpeed ?? 20} 
+                onChange={(e) => set({ logoSpinSpeed: Number(e.target.value) })} 
+                style={{ width: '100%' }}
+              />
+              <small style={{ color: '#6b7280', display: 'block', marginTop: '4px' }}>
+                Plus petit = plus rapide | Plus grand = plus lent
+              </small>
+            </label>
+          </div>
+        )}
+        <small style={{ display: 'block', marginTop: '8px', lineHeight: '1.4', color: '#6b7280' }}>
+          🎯 Le logo "UNE AUTRE ?" en haut tourne sur lui-même comme une roue (rotation 360°).
+        </small>
+      </div>
+      <div className="field">
+        <span>🌍 Animation du logo en orbite</span>
+        <label className="check">
+          <input 
+            type="checkbox" 
+            checked={s.logoOrbit ?? false} 
+            onChange={(e) => set({ logoOrbit: e.target.checked })} 
+          />
+          <span>Faire tourner le logo en orbite autour du "?"</span>
+        </label>
+        {s.logoOrbit && (
+          <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '6px' }}>
+            <label style={{ display: 'block', marginBottom: '8px' }}>
+              <small>Rayon de l'orbite <output>{s.logoOrbitRadius ?? 420}px</output></small>
+              <input 
+                type="range" 
+                min={250} 
+                max={550} 
+                step={10} 
+                value={s.logoOrbitRadius ?? 420} 
+                onChange={(e) => set({ logoOrbitRadius: Number(e.target.value) })} 
+                style={{ width: '100%' }}
+              />
+              <small style={{ color: '#6b7280' }}>Distance du logo par rapport au centre</small>
+            </label>
+            <label style={{ display: 'block', marginBottom: '8px' }}>
+              <small>Inclinaison de l'orbite <output>{s.logoOrbitTilt ?? -9}°</output></small>
+              <input 
+                type="range" 
+                min={-45} 
+                max={45} 
+                step={1} 
+                value={s.logoOrbitTilt ?? -9} 
+                onChange={(e) => set({ logoOrbitTilt: Number(e.target.value) })} 
+                style={{ width: '100%' }}
+              />
+              <small style={{ color: '#6b7280' }}>Angle d'inclinaison de l'anneau</small>
+            </label>
+            <label style={{ display: 'block' }}>
+              <small>Vitesse de rotation <output>{s.logoOrbitSpeed ?? 3.2}s</output></small>
+              <input 
+                type="range" 
+                min={1} 
+                max={10} 
+                step={0.2} 
+                value={s.logoOrbitSpeed ?? 3.2} 
+                onChange={(e) => set({ logoOrbitSpeed: Number(e.target.value) })} 
+                style={{ width: '100%' }}
+              />
+              <small style={{ color: '#6b7280' }}>Plus petit = plus rapide</small>
+            </label>
+          </div>
+        )}
+        <small style={{ display: 'block', marginTop: '8px', lineHeight: '1.4', color: '#6b7280' }}>
+          🌍 Comme dans <strong>"Ruban · Orbite"</strong> : le logo "UNE AUTRE ?" tourne en anneau incliné autour du "?" sculpté.
+          La moitié arrière passe derrière (estompée), la moitié avant devant (lumineuse).
+        </small>
+      </div>
+      {def.id === 'rubanrouge' && (
+        <>
+          <label className="field">
+            <span>
+              Taille des artistes <output>{Math.round((s.lineupScale ?? 1) * 100)} %</output>
+            </span>
+            <input type="range" min={0.65} max={1.3} step={0.05} value={s.lineupScale ?? 1} onChange={(e) => set({ lineupScale: Number(e.target.value) })} />
+            <small>Les noms restent ajustés à la largeur disponible.</small>
+          </label>
+          <label className="field">
+            <span>
+              Position verticale du texte <output>{s.lineupOffset ?? 0} px</output>
+            </span>
+            <input type="range" min={-180} max={180} step={5} value={s.lineupOffset ?? 0} onChange={(e) => set({ lineupOffset: Number(e.target.value) })} />
+            <small>Déplace ensemble les artistes et les informations, sans les faire sortir de l’affiche.</small>
+          </label>
+        </>
+      )}
+      {(def.id === 'rubansceau' || def.id === 'rubanorbite' || def.id === 'rubanhalo' || def.id === 'ruban') && (
+        <>
+          <label className="field">
+            <span>
+              Taille du graphique 3D <output>{Math.round((s.sculptureScale ?? 1) * 100)} %</output>
+            </span>
+            <input type="range" min={0.5} max={1.5} step={0.05} value={s.sculptureScale ?? 1} onChange={(e) => set({ sculptureScale: Number(e.target.value) })} />
+            <small>Ajuste la taille du « ? » sculpté en 3D.</small>
+          </label>
+          <div className="field">
+            <span>Position du graphique 3D</span>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <label style={{ flex: 1 }}>
+                <small>Horizontal (X) <output>{s.sculptureX ?? 0}px</output></small>
+                <input type="range" min={-400} max={400} step={10} value={s.sculptureX ?? 0} onChange={(e) => set({ sculptureX: Number(e.target.value) })} />
+              </label>
+              <label style={{ flex: 1 }}>
+                <small>Vertical (Y) <output>{s.sculptureY ?? 0}px</output></small>
+                <input type="range" min={-400} max={400} step={10} value={s.sculptureY ?? 0} onChange={(e) => set({ sculptureY: Number(e.target.value) })} />
+              </label>
+            </div>
+            <small>Déplacez le « ? » sculpté librement dans l'affiche.</small>
+          </div>
+          <div className="field">
+            <span>Position du titre en haut</span>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <label style={{ flex: 1 }}>
+                <small>Horizontal (X) <output>{s.logoPositionX ?? 0}px</output></small>
+                <input type="range" min={-400} max={400} step={10} value={s.logoPositionX ?? 0} onChange={(e) => set({ logoPositionX: Number(e.target.value) })} />
+              </label>
+              <label style={{ flex: 1 }}>
+                <small>Vertical (Y) <output>{s.logoPositionY ?? 0}px</output></small>
+                <input type="range" min={-300} max={600} step={10} value={s.logoPositionY ?? 0} onChange={(e) => set({ logoPositionY: Number(e.target.value) })} />
+              </label>
+            </div>
+            <small>Déplacez le titre (texte ou logo tournant selon la disposition choisie).</small>
+          </div>
+          <div className="field">
+            <span>Logo tournant avec le nom de la marque</span>
+            <label className="check">
+              <input type="checkbox" checked={s.badgeVisible !== false} onChange={(e) => set({ badgeVisible: e.target.checked })} />
+              <span>Afficher le logo tournant</span>
+            </label>
+            <div style={{ marginTop: '12px' }}>
+              <label>
+                <small>Police d'écriture du badge tournant</small>
+                <select 
+                  value={s.badgeFont ?? 'sans'} 
+                  onChange={(e) => set({ badgeFont: e.target.value })}
+                  style={{ 
+                    width: '100%', 
+                    padding: '10px 12px', 
+                    marginTop: '6px', 
+                    borderRadius: '6px', 
+                    border: '1.5px solid #d1d5db',
+                    fontSize: '14px',
+                    backgroundColor: '#fff',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <optgroup label="★ À MAIN LEVÉE - Style Manuscrit">
+                    <option value="script">Mrs Saint Delafield - Cursive élégante</option>
+                    <option value="gambetta">Gambetta Italic - Serif manuscrite</option>
+                  </optgroup>
+                  <optgroup label="✦ MODERNE & LUMINEUSE - Grasses & Impactantes">
+                    <option value="sans">General Sans - Grotesque (défaut)</option>
+                    <option value="display">Syne - Display contemporain</option>
+                    <option value="puff">Bagel Fat One - Gonflée & joyeuse</option>
+                    <option value="condensed">Anton - Condensée & forte</option>
+                  </optgroup>
+                  <optgroup label="○ DOUCE & SOLAIRE - Arrondies & Chaleureuses">
+                    <option value="round">Fredoka - Arrondie & amicale</option>
+                  </optgroup>
+                  <optgroup label="◇ CLASSIQUE & RAFFINÉE - Serif & Élégance">
+                    <option value="serif">Cormorant Garamond - Classique</option>
+                  </optgroup>
+                  <optgroup label="▪ TECHNIQUE - Monospace">
+                    <option value="mono">IBM Plex Mono - Code & précision</option>
+                  </optgroup>
+                </select>
+                <small style={{ display: 'block', marginTop: '8px', lineHeight: '1.4', color: '#6b7280' }}>
+                  💡 <strong>Conseil :</strong> Pour un style "À main levée" inspiré des thèmes <em>Lumière</em>, <em>Soleil</em>, <em>Menthe</em>, 
+                  essayez les polices manuscrites (Mrs Saint Delafield, Gambetta) ou arrondies (Fredoka).
+                </small>
+              </label>
+            </div>
+            <div style={{ marginTop: '12px', display: 'flex', gap: '12px' }}>
+              <label style={{ flex: 1 }}>
+                <small>Position X <output>{s.badgeX ?? 0}px</output></small>
+                <input 
+                  type="range" 
+                  min={-500} 
+                  max={800} 
+                  step={10} 
+                  value={s.badgeX ?? 0} 
+                  onChange={(e) => set({ badgeX: Number(e.target.value) })} 
+                  disabled={s.badgeVisible === false}
+                />
+              </label>
+              <label style={{ flex: 1 }}>
+                <small>Position Y <output>{s.badgeY ?? 0}px</output></small>
+                <input 
+                  type="range" 
+                  min={-1000} 
+                  max={400} 
+                  step={10} 
+                  value={s.badgeY ?? 0} 
+                  onChange={(e) => set({ badgeY: Number(e.target.value) })} 
+                  disabled={s.badgeVisible === false}
+                />
+              </label>
+            </div>
+            <div style={{ marginTop: '8px' }}>
+              <label>
+                <small>Taille <output>{Math.round((s.badgeScale ?? 1) * 100)}%</output></small>
+                <input 
+                  type="range" 
+                  min={0.5} 
+                  max={3} 
+                  step={0.1} 
+                  value={s.badgeScale ?? 1} 
+                  onChange={(e) => set({ badgeScale: Number(e.target.value) })} 
+                  disabled={s.badgeVisible === false}
+                />
+              </label>
+            </div>
+            <div style={{ marginTop: '8px' }}>
+              <label>
+                <small>Vitesse de rotation <output>{s.badgeRotationSpeed ?? 24}s</output></small>
+                <input 
+                  type="range" 
+                  min={5} 
+                  max={60} 
+                  step={1} 
+                  value={s.badgeRotationSpeed ?? 24} 
+                  onChange={(e) => set({ badgeRotationSpeed: Number(e.target.value) })} 
+                  disabled={s.badgeVisible === false}
+                />
+              </label>
+            </div>
+            <small>Le logo circulaire avec le nom de votre marque qui tourne. Placez-le où vous voulez : en bas à gauche (défaut), au centre, en haut, etc.</small>
+          </div>
+          <div className="field">
+            <span>Position du bloc de texte (artistes et infos)</span>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <label style={{ flex: 1 }}>
+                <small>Horizontal (X) <output>{s.textBlockX ?? 0}px</output></small>
+                <input type="range" min={-300} max={300} step={10} value={s.textBlockX ?? 0} onChange={(e) => set({ textBlockX: Number(e.target.value) })} />
+              </label>
+              <label style={{ flex: 1 }}>
+                <small>Vertical (Y) <output>{s.textBlockY ?? 0}px</output></small>
+                <input type="range" min={-400} max={400} step={10} value={s.textBlockY ?? 0} onChange={(e) => set({ textBlockY: Number(e.target.value) })} />
+              </label>
+            </div>
+            <small>Déplacez le bloc avec les noms des DJ/artistes et les informations de l'événement.</small>
+          </div>
+          <div className="field">
+            <span>Couleur du métal 3D</span>
+            <label className="check">
+              <input type="checkbox" checked={!!s.sculptureMetalDeep} onChange={(e) => {
+                if (e.target.checked) {
+                  set({ sculptureMetalDeep: '#050a2e', sculptureMetalMid: '#5a6a9e', sculptureMetalLight: '#f2f5ff' });
+                } else {
+                  set({ sculptureMetalDeep: undefined, sculptureMetalMid: undefined, sculptureMetalLight: undefined });
+                }
+              }} />
+              <span>Personnaliser la couleur du métal</span>
+            </label>
+            {s.sculptureMetalDeep && (
+              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                <label style={{ flex: 1 }}>
+                  <small>Profond</small>
+                  <input type="color" value={s.sculptureMetalDeep} onChange={(e) => set({ sculptureMetalDeep: e.target.value })} />
+                </label>
+                <label style={{ flex: 1 }}>
+                  <small>Moyen</small>
+                  <input type="color" value={s.sculptureMetalMid ?? '#5a6a9e'} onChange={(e) => set({ sculptureMetalMid: e.target.value })} />
+                </label>
+                <label style={{ flex: 1 }}>
+                  <small>Lumière</small>
+                  <input type="color" value={s.sculptureMetalLight ?? '#f2f5ff'} onChange={(e) => set({ sculptureMetalLight: e.target.value })} />
+                </label>
+              </div>
+            )}
+            <small>Personnalisez les trois tons du métal sculpté.</small>
+          </div>
+          <button 
+            className="btn ghost small" 
+            onClick={() => set({ 
+              sculptureX: 0, 
+              sculptureY: 0, 
+              logoPositionX: 0, 
+              logoPositionY: 0, 
+              textBlockX: 0, 
+              textBlockY: 0,
+              badgeX: 0,
+              badgeY: 0,
+              badgeScale: 1,
+              badgeRotationSpeed: 24,
+              badgeVisible: true
+            })}
+          >
+            Réinitialiser toutes les positions et le badge
+          </button>
+        </>
+      )}
       <label className="field">
         <span>
           Texture / grain <output>{Math.round(s.texture * 100)} %</output>

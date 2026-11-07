@@ -1,6 +1,12 @@
 import { useEffect } from 'react';
 import { CONCEPTS, CONCEPT_BY_ID } from './concepts';
+import { Book } from './components/Book';
+import { Bracelets } from './components/Bracelets';
 import { Compare } from './components/Compare';
+import { Crew } from './components/Crew';
+import { Stickers } from './components/Stickers';
+import { Meetings } from './components/Meetings';
+import { Extra } from './components/Extra';
 import { Experience } from './components/Experience';
 import { ExportProvider } from './components/ExportDialog';
 import { Focus } from './components/Focus';
@@ -39,6 +45,24 @@ function Shell() {
           <a href="#/atelier" className={route.name === 'atelier' ? 'on' : ''}>
             Les pistes <kbd>G</kbd>
           </a>
+          <a href="#/bracelets" className={route.name === 'bracelets' ? 'on' : ''}>
+            Bracelets
+          </a>
+          <a href="#/book" className={route.name === 'book' ? 'on' : ''}>
+            Book
+          </a>
+          <a href="#/crew" className={route.name === 'crew' ? 'on' : ''}>
+            Crew
+          </a>
+          <a href="#/stickers" className={route.name === 'stickers' ? 'on' : ''}>
+            Stickers
+          </a>
+          <a href="#/reunions" className={route.name === 'reunions' ? 'on' : ''}>
+            Réunions
+          </a>
+          <a href="#/extra" className={route.name === 'extra' ? 'on' : ''}>
+            Extra
+          </a>
           <a href="#/compare" className={route.name === 'compare' ? 'on' : ''}>
             Comparer [{compare.length}]
           </a>
@@ -56,6 +80,12 @@ function Shell() {
       )}
       {route.name === 'atelier' && <Table go={go} />}
       {route.name === 'compare' && <Compare go={go} />}
+      {route.name === 'bracelets' && <Bracelets />}
+      {route.name === 'crew' && <Crew />}
+      {route.name === 'stickers' && <Stickers />}
+      {route.name === 'reunions' && <Meetings />}
+      {route.name === 'extra' && <Extra />}
+      {route.name === 'book' && <Book />}
       {route.name === 'concept' && <Focus def={CONCEPT_BY_ID[route.id]} sheet={route.sheet} go={go} />}
     </div>
   );
