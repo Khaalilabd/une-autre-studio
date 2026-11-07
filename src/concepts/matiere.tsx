@@ -516,16 +516,28 @@ function LogoBadge({ cx, cy, r, text, fg, on, rotationSpeed = 24, fontFamily = F
   );
 }
 
-/** Headline = the line-up joined by "+", on one row when it fits, else two. */
-function headline(content: EventContent, maxW: number, max: number, titleFont = "'General Sans'") {
+/** Headline = the line-up joined by "+", on one row when it fits, else two. Or each artist on its own line. */
+function headline(content: EventContent, maxW: number, max: number, titleFont = "'General Sans'", layout: 'joined' | 'stacked' = 'joined') {
   const names = content.lineup.map((a) => a.name.toUpperCase()).filter(Boolean);
   const font = { family: titleFont, size: max, weight: 700, tracking: -max * 0.03 };
+  
+  // Mode stacked: chaque artiste sur sa propre ligne
+  if (layout === 'stacked') {
+    return {
+      rows: names,
+      size: max,
+      sizes: names.map(name => fitMeasured(name, maxW, font))
+    };
+  }
+  
+  // Mode joined (par défaut): artistes joints par "+"
   const one = names.join(' + ');
   const s1 = fitMeasured(one, maxW, font);
-  if (s1 >= max * 0.7 || names.length < 2) return { rows: [one], size: s1 };
+  if (s1 >= max * 0.7 || names.length < 2) return { rows: [one], size: s1, sizes: [s1] };
   const h = Math.ceil(names.length / 2);
   const rows = [names.slice(0, h).join(' + '), '+ ' + names.slice(h).join(' + ')];
-  return { rows, size: Math.min(...rows.map((r) => fitMeasured(r, maxW, font))) };
+  const sizes = rows.map((r) => fitMeasured(r, maxW, font));
+  return { rows, size: Math.min(...sizes), sizes };
 }
 
 interface TextProps {
@@ -668,9 +680,10 @@ export function InfoLayer({ st, content, settings, fg, accent, shadow, sq, on, s
     );
   })();
 
-  const hl = headline(content, W - M * 2, sq ? 84 : 108, titleFont);
+  const hl = headline(content, W - M * 2, sq ? 84 : 108, titleFont, settings.lineupLayout ?? 'joined');
   const hy = sq ? 540 : 790;
-  const infoY = hy + (hl.rows.length - 1) * hl.size * 0.98 + (sq ? 62 : 84);
+  const lineSpacing = settings.lineupLineSpacing ?? (sq ? 80 : 100);
+  const infoY = hy + (hl.rows.length - 1) * lineSpacing + (sq ? 62 : 84);
   const sig = lines(content.signature);
   const man = lines(content.manifesto);
   const big = sq ? 44 : 60;
@@ -804,11 +817,24 @@ export function InfoLayer({ st, content, settings, fg, accent, shadow, sq, on, s
       ) : (
         // Standard font-based text
         <g filter={`url(#${id})`} fill={fg} transform={`translate(${textOffsetX} ${textOffsetY})`}>
-          {hl.rows.map((r, i) => (
-            <text key={i} x={W / 2} y={hy + i * hl.size * 0.98} textAnchor="middle" fontFamily={titleFont} fontWeight={700} fontSize={hl.size} letterSpacing={-hl.size * 0.03}>
-              {r}
-            </text>
-          ))}
+          {hl.rows.map((r, i) => {
+            const individualSize = settings.lineupIndividualSizes?.[i] ?? hl.sizes![i];
+            const individualOffset = settings.lineupIndividualOffsets?.[i] ?? 0;
+            return (
+              <text 
+                key={i} 
+                x={W / 2} 
+                y={hy + i * lineSpacing + individualOffset} 
+                textAnchor="middle" 
+                fontFamily={titleFont} 
+                fontWeight={700} 
+                fontSize={individualSize} 
+                letterSpacing={-individualSize * 0.03}
+              >
+                {r}
+              </text>
+            );
+          })}
           {split ? (
             <>
               <text x={M} y={infoY} fontFamily={titleFont} fontWeight={700} fontSize={fitMeasured(content.date, 380, { family: titleFont, size: big, weight: 700, tracking: -big * 0.02 })} letterSpacing={-big * 0.02}>

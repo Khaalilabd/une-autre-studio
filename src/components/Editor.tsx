@@ -120,7 +120,7 @@ function readPhoto(file: File): Promise<string> {
 }
 
 export function CreativeControls({ def }: { def: ConceptDef }) {
-  const { settings, setSettings, resetConcept, photo, setPhoto, storageWarning } = useStudio();
+  const { settings, setSettings, resetConcept, photo, setPhoto, storageWarning, content } = useStudio();
   const s = settings[def.id];
   const set = (patch: Partial<CreativeSettings>) => setSettings(def.id, patch);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -662,6 +662,82 @@ export function CreativeControls({ def }: { def: ConceptDef }) {
           { value: 'stack', label: 'Liste' },
         ]}
       />
+      <div className="field" style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px', marginTop: '16px' }}>
+        <span>📋 Disposition du lineup (artistes/DJs)</span>
+        <Segmented
+          label=""
+          value={s.lineupLayout ?? 'joined'}
+          onChange={(lineupLayout: 'joined' | 'stacked') => set({ lineupLayout })}
+          options={[
+            { value: 'joined', label: 'Joints (+)' },
+            { value: 'stacked', label: 'Lignes séparées' },
+          ]}
+        />
+        <small style={{ display: 'block', marginTop: '8px', lineHeight: '1.4', color: '#6b7280' }}>
+          <strong>Joints :</strong> Tous les artistes sur 1-2 lignes séparés par " + "<br/>
+          <strong>Lignes séparées :</strong> Chaque artiste sur sa propre ligne
+        </small>
+        
+        {s.lineupLayout === 'stacked' && (
+          <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '6px' }}>
+            <label style={{ display: 'block', marginBottom: '12px' }}>
+              <small>Espacement entre les lignes <output>{s.lineupLineSpacing ?? 100}px</output></small>
+              <input 
+                type="range" 
+                min={40} 
+                max={200} 
+                step={5} 
+                value={s.lineupLineSpacing ?? 100} 
+                onChange={(e) => set({ lineupLineSpacing: Number(e.target.value) })} 
+                style={{ width: '100%' }}
+              />
+            </label>
+            
+            <div style={{ marginTop: '12px' }}>
+              <strong style={{ fontSize: '13px', display: 'block', marginBottom: '8px' }}>Contrôles individuels par ligne :</strong>
+              {content.lineup.map((artist, i) => (
+                <div key={artist.id} style={{ marginBottom: '12px', padding: '8px', backgroundColor: '#fff', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
+                  <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '6px', color: '#374151' }}>
+                    Ligne {i + 1}: {artist.name}
+                  </div>
+                  <label style={{ display: 'block', marginBottom: '6px' }}>
+                    <small>Taille <output>{Math.round((s.lineupIndividualSizes?.[i] ?? 84) * 100 / 84)}%</output></small>
+                    <input 
+                      type="range" 
+                      min={40} 
+                      max={120} 
+                      step={2} 
+                      value={s.lineupIndividualSizes?.[i] ?? 84} 
+                      onChange={(e) => {
+                        const sizes = [...(s.lineupIndividualSizes ?? content.lineup.map(() => 84))];
+                        sizes[i] = Number(e.target.value);
+                        set({ lineupIndividualSizes: sizes });
+                      }} 
+                      style={{ width: '100%' }}
+                    />
+                  </label>
+                  <label style={{ display: 'block' }}>
+                    <small>Position Y <output>{s.lineupIndividualOffsets?.[i] ?? 0}px</output></small>
+                    <input 
+                      type="range" 
+                      min={-100} 
+                      max={100} 
+                      step={5} 
+                      value={s.lineupIndividualOffsets?.[i] ?? 0} 
+                      onChange={(e) => {
+                        const offsets = [...(s.lineupIndividualOffsets ?? content.lineup.map(() => 0))];
+                        offsets[i] = Number(e.target.value);
+                        set({ lineupIndividualOffsets: offsets });
+                      }} 
+                      style={{ width: '100%' }}
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
       <Segmented
         label="Format principal"
         value={s.format}

@@ -145,6 +145,11 @@ export interface CreativeSettings {
   // Simple logo rotation (spin on itself)
   logoSpin?: boolean;
   logoSpinSpeed?: number;
+  // Lineup layout control
+  lineupLayout?: 'joined' | 'stacked';  // 'joined' = tous sur 1-2 lignes avec +, 'stacked' = chaque artiste sur sa ligne
+  lineupLineSpacing?: number;  // Espacement entre les lignes en mode stacked
+  lineupIndividualSizes?: number[];  // Taille de chaque ligne (optionnel)
+  lineupIndividualOffsets?: number[];  // Décalage Y de chaque ligne (optionnel)
 }
 
 export interface Colors {
