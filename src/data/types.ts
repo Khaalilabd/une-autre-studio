@@ -91,6 +91,12 @@ export interface EventContent {
   lineupText?: string;
   /** Mode d'affichage : false = joints avec +, true = empilés ligne par ligne */
   lineupStacked?: boolean;
+  /** Logos des sponsors (base64 ou URL) */
+  sponsorLogos?: Array<{
+    id: string;
+    image: string;
+    name: string;
+  }>;
   mentions: string;
   coords: string;
 }
@@ -168,6 +174,20 @@ export interface CreativeSettings {
   mentionsY?: number;
   signatureX?: number;
   signatureY?: number;
+  // Sponsor logos controls
+  sponsorLogosVisible?: boolean;
+  sponsorLogosScale?: number;
+  sponsorLogosX?: number;
+  sponsorLogosY?: number;
+  sponsorLogosSpacing?: number;  // Espacement entre les logos
+  sponsorLogosBlendMode?: 'normal' | 'multiply' | 'screen' | 'overlay' | 'color-burn' | 'luminosity';
+  sponsorLogosColorize?: boolean;  // Appliquer la couleur du thème
+  sponsorLogosOpacity?: number;
+  sponsorIndividualSettings?: Array<{
+    scale?: number;
+    x?: number;
+    y?: number;
+  }>;
 }
 
 export interface Colors {

@@ -944,6 +944,65 @@ export function InfoLayer({ st, content, settings, fg, accent, shadow, sq, on, s
           </g>
         </g>
       )}
+      
+      {/* Sponsor Logos */}
+      {settings.sponsorLogosVisible !== false && (content.sponsorLogos ?? []).length > 0 && (
+        <g transform={`translate(${settings.sponsorLogosX ?? 0} ${settings.sponsorLogosY ?? 0})`}>
+          <defs>
+            {settings.sponsorLogosColorize && (
+              <filter id="sponsor-colorize">
+                <feColorMatrix
+                  type="matrix"
+                  values="0 0 0 0 0
+                          0 0 0 0 0  
+                          0 0 0 0 0
+                          0 0 0 1 0"
+                />
+                <feComponentTransfer>
+                  <feFuncR type="linear" slope="2" intercept="-0.5"/>
+                  <feFuncG type="linear" slope="2" intercept="-0.5"/>
+                  <feFuncB type="linear" slope="2" intercept="-0.5"/>
+                </feComponentTransfer>
+                <feFlood floodColor={fg} result="flood"/>
+                <feComposite in="flood" in2="SourceGraphic" operator="in"/>
+              </filter>
+            )}
+          </defs>
+          {content.sponsorLogos!.map((logo, i) => {
+            const individualSettings = settings.sponsorIndividualSettings?.[i] ?? {};
+            const globalScale = settings.sponsorLogosScale ?? 1;
+            const individualScale = individualSettings.scale ?? 1;
+            const finalScale = globalScale * individualScale;
+            const spacing = settings.sponsorLogosSpacing ?? 20;
+            const logoWidth = 80 * finalScale;
+            const logoHeight = 80 * finalScale;
+            const totalWidth = content.sponsorLogos!.length * logoWidth + (content.sponsorLogos!.length - 1) * spacing;
+            const startX = (W - totalWidth) / 2 + i * (logoWidth + spacing);
+            const baseY = sq ? H - 60 : H - 80; // Ajusté selon le format
+            const blendMode = settings.sponsorLogosBlendMode ?? 'normal';
+            const opacity = settings.sponsorLogosOpacity ?? 1;
+            
+            return (
+              <g 
+                key={logo.id}
+                transform={`translate(${startX + (individualSettings.x ?? 0)} ${baseY + (individualSettings.y ?? 0)})`}
+                opacity={opacity}
+              >
+                <image 
+                  href={logo.image} 
+                  width={logoWidth} 
+                  height={logoHeight} 
+                  x={0}
+                  y={0}
+                  preserveAspectRatio="xMidYMid meet"
+                  style={{ mixBlendMode: blendMode }}
+                  filter={settings.sponsorLogosColorize ? 'url(#sponsor-colorize)' : undefined}
+                />
+              </g>
+            );
+          })}
+        </g>
+      )}
     </g>
   );
 }

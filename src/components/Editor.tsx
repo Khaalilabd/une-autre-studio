@@ -70,6 +70,75 @@ export function ContentEditor() {
       </div>
       <Field label="Mentions secondaires" value={content.mentions} onChange={(mentions) => setContent({ mentions })} placeholder="Facultatif — ex. entrée, partenaires…" />
       <Field label="Coordonnées / annotation" value={content.coords} onChange={(coords) => setContent({ coords })} placeholder="Facultatif — ex. coordonnées GPS du lieu" />
+      
+      <div className="field" style={{ borderTop: '2px solid #e5e7eb', paddingTop: '16px', marginTop: '16px' }}>
+        <span style={{ fontSize: '15px', fontWeight: 600 }}>🏢 Logos des sponsors / partenaires</span>
+        <small style={{ display: 'block', marginTop: '6px', marginBottom: '12px', color: '#6b7280' }}>
+          Ajoutez les logos de vos sponsors qui apparaîtront en bas de l'affiche.
+        </small>
+        
+        <input
+          type="file"
+          accept="image/*"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) return;
+            try {
+              const image = await readLogo(file);
+              const newLogo = {
+                id: Date.now().toString(),
+                image,
+                name: file.name.replace(/\.[^/.]+$/, '')
+              };
+              setContent({ 
+                sponsorLogos: [...(content.sponsorLogos ?? []), newLogo] 
+              });
+            } catch (err) {
+              alert('Erreur lors du chargement du logo');
+            }
+          }}
+          style={{
+            padding: '12px',
+            border: '2px dashed #d1d5db',
+            borderRadius: '6px',
+            width: '100%',
+            cursor: 'pointer',
+            marginBottom: '12px'
+          }}
+        />
+        
+        {(content.sponsorLogos ?? []).length > 0 && (
+          <div style={{ display: 'grid', gap: '8px' }}>
+            {content.sponsorLogos!.map((logo) => (
+              <div key={logo.id} style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '12px', 
+                padding: '8px', 
+                backgroundColor: '#f9fafb', 
+                borderRadius: '6px',
+                border: '1px solid #e5e7eb'
+              }}>
+                <img src={logo.image} alt={logo.name} style={{ width: '40px', height: '40px', objectFit: 'contain' }} />
+                <span style={{ flex: 1, fontSize: '13px', fontWeight: 500 }}>{logo.name}</span>
+                <button 
+                  className="btn ghost small" 
+                  onClick={() => {
+                    setContent({ 
+                      sponsorLogos: content.sponsorLogos!.filter(l => l.id !== logo.id) 
+                    });
+                  }}
+                  style={{ padding: '4px 8px', fontSize: '12px' }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      
       <button className="btn ghost small" onClick={resetContent}>
         Réinitialiser le contenu de démonstration
       </button>
@@ -108,6 +177,29 @@ function readPhoto(file: File): Promise<string> {
       c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
       resolve(c.toDataURL('image/jpeg', 0.86));
+    };
+    img.onerror = () => reject(new Error('Image illisible'));
+    img.src = url;
+  });
+}
+
+/** Downscales a logo with transparency support (PNG format). */
+function readLogo(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const max = 300; // Plus petit pour les logos
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k);
+      c.height = Math.round(img.height * k);
+      const ctx = c.getContext('2d')!;
+      // Important: ne pas remplir le fond, garder la transparence
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      // Utiliser PNG pour garder la transparence
+      resolve(c.toDataURL('image/png'));
     };
     img.onerror = () => reject(new Error('Image illisible'));
     img.src = url;
@@ -957,6 +1049,198 @@ export function CreativeControls({ def }: { def: ConceptDef }) {
           </div>
         </div>
       </div>
+      
+      {(content.sponsorLogos ?? []).length > 0 && (
+        <div className="field" style={{ borderTop: '2px solid #e5e7eb', paddingTop: '20px', marginTop: '20px' }}>
+          <span style={{ fontSize: '16px', fontWeight: 600, color: '#111827' }}>🏢 Position et taille des sponsors</span>
+          <small style={{ display: 'block', marginTop: '8px', marginBottom: '16px', lineHeight: '1.4', color: '#6b7280' }}>
+            {content.sponsorLogos!.length} {content.sponsorLogos!.length === 1 ? 'logo ajouté' : 'logos ajoutés'}. Contrôlez leur affichage globalement et individuellement.
+          </small>
+          
+          <div style={{ padding: '12px', backgroundColor: '#f0f9ff', borderRadius: '6px', marginBottom: '16px', border: '1px solid #bae6fd' }}>
+            <strong style={{ display: 'block', marginBottom: '12px', color: '#0c4a6e' }}>🌐 Contrôles globaux (tous les logos)</strong>
+            
+            <label className="check" style={{ marginBottom: '12px' }}>
+              <input 
+                type="checkbox" 
+                checked={s.sponsorLogosVisible !== false} 
+                onChange={(e) => set({ sponsorLogosVisible: e.target.checked })} 
+              />
+              <span>Afficher les logos des sponsors</span>
+            </label>
+            
+            <label style={{ display: 'block', marginBottom: '8px' }}>
+              <small>Taille globale <output>{Math.round((s.sponsorLogosScale ?? 1) * 100)}%</output></small>
+              <input 
+                type="range" 
+                min={20} 
+                max={200} 
+                step={5} 
+                value={(s.sponsorLogosScale ?? 1) * 100} 
+                onChange={(e) => set({ sponsorLogosScale: Number(e.target.value) / 100 })} 
+                style={{ width: '100%' }}
+              />
+            </label>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '8px' }}>
+              <label style={{ display: 'block' }}>
+                <small>Position X <output>{s.sponsorLogosX ?? 0}px</output></small>
+                <input 
+                  type="range" 
+                  min={-400} 
+                  max={400} 
+                  step={10} 
+                  value={s.sponsorLogosX ?? 0} 
+                  onChange={(e) => set({ sponsorLogosX: Number(e.target.value) })} 
+                  style={{ width: '100%' }}
+                />
+              </label>
+              
+              <label style={{ display: 'block' }}>
+                <small>Position Y <output>{s.sponsorLogosY ?? 0}px</output></small>
+                <input 
+                  type="range" 
+                  min={-400} 
+                  max={400} 
+                  step={10} 
+                  value={s.sponsorLogosY ?? 0} 
+                  onChange={(e) => set({ sponsorLogosY: Number(e.target.value) })} 
+                  style={{ width: '100%' }}
+                />
+              </label>
+            </div>
+            
+            <label style={{ display: 'block' }}>
+              <small>Espacement entre logos <output>{s.sponsorLogosSpacing ?? 20}px</output></small>
+              <input 
+                type="range" 
+                min={0} 
+                max={100} 
+                step={5} 
+                value={s.sponsorLogosSpacing ?? 20} 
+                onChange={(e) => set({ sponsorLogosSpacing: Number(e.target.value) })} 
+                style={{ width: '100%' }}
+              />
+            </label>
+            
+            <label style={{ display: 'block', marginTop: '12px' }}>
+              <small>Opacité <output>{Math.round((s.sponsorLogosOpacity ?? 1) * 100)}%</output></small>
+              <input 
+                type="range" 
+                min={0.1} 
+                max={1} 
+                step={0.05} 
+                value={s.sponsorLogosOpacity ?? 1} 
+                onChange={(e) => set({ sponsorLogosOpacity: Number(e.target.value) })} 
+                style={{ width: '100%' }}
+              />
+            </label>
+            
+            <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #bae6fd' }}>
+              <strong style={{ display: 'block', marginBottom: '8px', fontSize: '13px' }}>🎨 Style d'intégration</strong>
+              
+              <label className="check" style={{ marginBottom: '8px' }}>
+                <input 
+                  type="checkbox" 
+                  checked={s.sponsorLogosColorize ?? false} 
+                  onChange={(e) => set({ sponsorLogosColorize: e.target.checked })} 
+                />
+                <span>Appliquer la couleur du thème (effet duotone)</span>
+              </label>
+              
+              <label style={{ display: 'block' }}>
+                <small>Mode de fusion</small>
+                <select 
+                  value={s.sponsorLogosBlendMode ?? 'normal'} 
+                  onChange={(e) => set({ sponsorLogosBlendMode: e.target.value as any })}
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px', 
+                    borderRadius: '4px', 
+                    border: '1px solid #bae6fd',
+                    marginTop: '4px'
+                  }}
+                >
+                  <option value="normal">Normal (couleurs d'origine)</option>
+                  <option value="multiply">Multiply (fonce les couleurs)</option>
+                  <option value="screen">Screen (éclaircit)</option>
+                  <option value="overlay">Overlay (contraste)</option>
+                  <option value="color-burn">Color Burn (brûle avec thème)</option>
+                  <option value="luminosity">Luminosity (garde luminosité)</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          
+          <div style={{ display: 'grid', gap: '12px' }}>
+            <strong style={{ display: 'block', color: '#374151' }}>⚙️ Contrôles individuels</strong>
+            {content.sponsorLogos!.map((logo, i) => {
+              const settings = s.sponsorIndividualSettings?.[i] ?? {};
+              return (
+                <div key={logo.id} style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    <img src={logo.image} alt={logo.name} style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
+                    <strong style={{ fontSize: '13px', color: '#374151' }}>{logo.name}</strong>
+                  </div>
+                  
+                  <label style={{ display: 'block', marginBottom: '8px' }}>
+                    <small>Taille <output>{Math.round((settings.scale ?? 1) * 100)}%</output></small>
+                    <input 
+                      type="range" 
+                      min={20} 
+                      max={300} 
+                      step={5} 
+                      value={(settings.scale ?? 1) * 100} 
+                      onChange={(e) => {
+                        const newSettings = [...(s.sponsorIndividualSettings ?? [])];
+                        newSettings[i] = { ...(newSettings[i] ?? {}), scale: Number(e.target.value) / 100 };
+                        set({ sponsorIndividualSettings: newSettings });
+                      }} 
+                      style={{ width: '100%' }}
+                    />
+                  </label>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <label style={{ display: 'block' }}>
+                      <small>X <output>{settings.x ?? 0}px</output></small>
+                      <input 
+                        type="range" 
+                        min={-200} 
+                        max={200} 
+                        step={5} 
+                        value={settings.x ?? 0} 
+                        onChange={(e) => {
+                          const newSettings = [...(s.sponsorIndividualSettings ?? [])];
+                          newSettings[i] = { ...(newSettings[i] ?? {}), x: Number(e.target.value) };
+                          set({ sponsorIndividualSettings: newSettings });
+                        }} 
+                        style={{ width: '100%' }}
+                      />
+                    </label>
+                    
+                    <label style={{ display: 'block' }}>
+                      <small>Y <output>{settings.y ?? 0}px</output></small>
+                      <input 
+                        type="range" 
+                        min={-200} 
+                        max={200} 
+                        step={5} 
+                        value={settings.y ?? 0} 
+                        onChange={(e) => {
+                          const newSettings = [...(s.sponsorIndividualSettings ?? [])];
+                          newSettings[i] = { ...(newSettings[i] ?? {}), y: Number(e.target.value) };
+                          set({ sponsorIndividualSettings: newSettings });
+                        }} 
+                        style={{ width: '100%' }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       
       <button className="btn ghost small" onClick={() => resetConcept(def.id)}>
         Réinitialiser les réglages de ce concept

@@ -25,6 +25,8 @@ export const DEFAULT_CONTENT: EventContent = {
   lineupText: '',
   // Mode d'affichage par défaut : false = joints avec +
   lineupStacked: false,
+  // Logos des sponsors
+  sponsorLogos: [],
   mentions: '',
   coords: '',
 };
