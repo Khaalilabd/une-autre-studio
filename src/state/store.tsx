@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { CONCEPTS } from '../concepts';
 import { DEFAULT_CONTENT } from '../data/content';
 import type { ConceptDef, ConceptId, CreativeSettings, EventContent } from '../data/types';
+import { loadWorkspace, loadSettings } from '../lib/persistence';
 
 interface Persisted {
   content: EventContent;
@@ -73,6 +74,31 @@ const Ctx = createContext<Store | null>(null);
 export function StudioProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<Persisted>(load);
   const [storageWarning, setWarning] = useState(false);
+  const [gitDataLoaded, setGitDataLoaded] = useState(false);
+
+  // Charger les données Git au démarrage (une seule fois)
+  useEffect(() => {
+    if (gitDataLoaded) return;
+    
+    Promise.all([loadWorkspace(), loadSettings()]).then(([workspace, settings]) => {
+      if (workspace || settings) {
+        console.log('📥 Chargement des données Git...');
+        setState(s => ({
+          ...s,
+          ...(workspace ? { content: { ...s.content, ...workspace.content } } : {}),
+          ...(settings ? { 
+            settings: { ...s.settings, ...settings.settings },
+            photo: settings.photo ?? s.photo 
+          } : {})
+        }));
+        console.log('✅ Données Git chargées !');
+      }
+      setGitDataLoaded(true);
+    }).catch(err => {
+      console.warn('⚠️ Impossible de charger les données Git, utilisation du localStorage', err);
+      setGitDataLoaded(true);
+    });
+  }, [gitDataLoaded]);
 
   useEffect(() => {
     // Save immediately without delay

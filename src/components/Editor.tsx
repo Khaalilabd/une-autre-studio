@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import type { ConceptDef, CreativeSettings } from '../data/types';
 import { useStudio } from '../state/store';
+import { saveWorkspace, downloadWorkspaceFile, saveSettings, downloadSettingsFile } from '../lib/persistence';
 
 function Field({ label, value, onChange, multiline, placeholder, hint }: { label: string; value: string; onChange: (v: string) => void; multiline?: boolean; placeholder?: string; hint?: string }) {
   return (
@@ -142,6 +143,27 @@ export function ContentEditor() {
       <button className="btn ghost small" onClick={resetContent}>
         Réinitialiser le contenu de démonstration
       </button>
+      
+      <div style={{ borderTop: '2px solid #e5e7eb', paddingTop: '16px', marginTop: '16px' }}>
+        <span style={{ fontSize: '15px', fontWeight: 600, display: 'block', marginBottom: '8px' }}>💾 Sauvegarde Git</span>
+        <small style={{ display: 'block', marginBottom: '12px', color: '#6b7280', lineHeight: '1.4' }}>
+          Téléchargez vos données pour les sauvegarder dans Git et les synchroniser entre vos PCs.
+        </small>
+        <button 
+          className="btn primary small" 
+          onClick={() => {
+            const data = saveWorkspace(content);
+            downloadWorkspaceFile(data);
+            alert('✅ Fichier workspace.json téléchargé !\n\nÉtapes suivantes:\n1. Remplacez /data/workspace.json par ce fichier\n2. git add data/workspace.json\n3. git commit -m "Sauvegarde travail"\n4. git push');
+          }}
+          style={{ marginRight: '8px' }}
+        >
+          📥 Télécharger workspace.json
+        </button>
+        <small style={{ display: 'block', marginTop: '8px', padding: '8px', backgroundColor: '#eff6ff', borderRadius: '4px', border: '1px solid #bfdbfe' }}>
+          💡 Ensuite : Remplacez le fichier dans <code>/data/workspace.json</code>, puis faites <code>git push</code>. Sur votre autre PC : <code>git pull</code> et rechargez !
+        </small>
+      </div>
     </div>
   );
 }
@@ -1241,6 +1263,20 @@ export function CreativeControls({ def }: { def: ConceptDef }) {
           </div>
         </div>
       )}
+      
+      <div style={{ borderTop: '2px solid #e5e7eb', paddingTop: '16px', marginTop: '16px' }}>
+        <button 
+          className="btn primary small" 
+          onClick={() => {
+            const data = saveSettings(settings, photo);
+            downloadSettingsFile(data);
+            alert('✅ Fichier settings.json téléchargé !\n\nÉtapes suivantes:\n1. Remplacez /data/settings.json par ce fichier\n2. git add data/settings.json\n3. git commit -m "Sauvegarde réglages"\n4. git push');
+          }}
+          style={{ marginBottom: '12px', width: '100%' }}
+        >
+          💾 Sauvegarder les réglages (settings.json)
+        </button>
+      </div>
       
       <button className="btn ghost small" onClick={() => resetConcept(def.id)}>
         Réinitialiser les réglages de ce concept

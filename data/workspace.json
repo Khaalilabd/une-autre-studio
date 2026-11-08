@@ -1,0 +1,23 @@
+{
+  "version": "1.0",
+  "lastModified": "2026-11-07T20:53:00.000Z",
+  "content": {
+    "brand": "UNE AUTRE ?",
+    "editionAccent": "#1636d8",
+    "signature": "DE LIEU EN LIEU\nUN MÊME ESPRIT\nUNE AUTRE EXPÉRIENCE",
+    "pillars": "MUSIC · ART · DRINKS · PEOPLE",
+    "manifesto": "A DIFFERENT TRACK\nA DIFFERENT VIBE\nA DIFFERENT EDITION",
+    "edition": "1ÈRE ÉDITION",
+    "editionNumber": "01",
+    "venue": "EXEMPLE DE LIEU (À CONFIRMER)",
+    "date": "DATE À CONFIRMER",
+    "hours": "22:00 — 04:00",
+    "lineupTitle": "PROGRAMMATION · PISTES",
+    "lineup": [],
+    "lineupText": "",
+    "lineupStacked": false,
+    "sponsorLogos": [],
+    "mentions": "",
+    "coords": ""
+  }
+}
