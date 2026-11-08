@@ -746,12 +746,14 @@ export function InfoLayer({ st, content, settings, fg, accent, shadow, sq, on, s
               const baseCap = sq ? 74 : 98;
               const customScale = settings.lineupCustomSizes?.[i] ?? 100;
               const scaledCap = baseCap * (customScale / 100);
+              const individualOffsetY = settings.lineupIndividualOffsets?.[i] ?? 0;
+              const individualOffsetX = ((settings.lineupIndividualSizes?.[i] as any)?.x ?? 0);
               return (
                 <HandLine 
                   key={i}
                   text={rowText} 
-                  x={W / 2} 
-                  y={hy + (sq ? 10 : 20) + i * lineSpacing} 
+                  x={W / 2 + individualOffsetX} 
+                  y={hy + (sq ? 10 : 20) + i * lineSpacing + individualOffsetY} 
                   cap={scaledCap} 
                   maxW={W - M * 2} 
                   h={handStyle} 
@@ -860,12 +862,13 @@ export function InfoLayer({ st, content, settings, fg, accent, shadow, sq, on, s
             const baseSize = settings.lineupIndividualSizes?.[i] ?? hl.sizes![i];
             const customScale = settings.lineupCustomSizes?.[i] ?? 100;
             const individualSize = baseSize * (customScale / 100);
-            const individualOffset = settings.lineupIndividualOffsets?.[i] ?? 0;
+            const individualOffsetY = settings.lineupIndividualOffsets?.[i] ?? 0;
+            const individualOffsetX = ((settings.lineupIndividualSizes?.[i] as any)?.x ?? 0);
             return (
               <text 
                 key={i} 
-                x={W / 2} 
-                y={hy + i * lineSpacing + individualOffset} 
+                x={W / 2 + individualOffsetX} 
+                y={hy + i * lineSpacing + individualOffsetY} 
                 textAnchor="middle" 
                 fontFamily={titleFont} 
                 fontWeight={700} 

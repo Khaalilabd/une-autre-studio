@@ -419,27 +419,33 @@ export function CreativeControls({ def }: { def: ConceptDef }) {
         </small>
       </div>
       
-      {content.lineupText && content.lineupText.trim() && content.lineupStacked && (() => {
-        const lines = content.lineupText.split('\n').filter(l => l.trim());
+      {/* Contrôles de taille et position pour chaque ligne du lineup */}
+      {(() => {
+        const lines = content.lineupText && content.lineupText.trim() 
+          ? content.lineupText.split('\n').filter(l => l.trim())
+          : content.lineup.map(a => a.name);
+        
         if (lines.length === 0) return null;
+        
         return (
           <div className="field" style={{ borderTop: '2px solid #e5e7eb', paddingTop: '16px', marginTop: '16px' }}>
-            <span style={{ fontSize: '15px', fontWeight: 600 }}>🎚️ Taille de chaque ligne du lineup</span>
+            <span style={{ fontSize: '15px', fontWeight: 600 }}>🎚️ Contrôles individuels du lineup</span>
             <small style={{ display: 'block', marginBottom: '12px', marginTop: '6px', color: '#6b7280' }}>
-              ✅ {lines.length} {lines.length === 1 ? 'ligne détectée' : 'lignes détectées'}. Ajustez la taille de chaque ligne individuellement (100% = taille automatique).
+              ✅ {lines.length} {lines.length === 1 ? 'ligne détectée' : 'lignes détectées'}. Ajustez la taille et la position de chaque ligne individuellement.
             </small>
             <div style={{ display: 'grid', gap: '12px' }}>
               {lines.map((line, i) => (
-                <div key={i} style={{ padding: '10px', backgroundColor: '#f9fafb', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
-                  <strong style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: '#374151' }}>
+                <div key={i} style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+                  <strong style={{ display: 'block', marginBottom: '10px', fontSize: '13px', color: '#374151' }}>
                     📌 Ligne {i + 1}: {line.substring(0, 30)}{line.length > 30 ? '...' : ''}
                   </strong>
-                  <label style={{ display: 'block' }}>
+                  
+                  <label style={{ display: 'block', marginBottom: '8px' }}>
                     <small>Taille <output>{(s.lineupCustomSizes?.[i] ?? 100).toFixed(0)}%</output></small>
                     <input 
                       type="range" 
                       min={30} 
-                      max={150} 
+                      max={200} 
                       step={5} 
                       value={s.lineupCustomSizes?.[i] ?? 100} 
                       onChange={(e) => {
@@ -450,6 +456,42 @@ export function CreativeControls({ def }: { def: ConceptDef }) {
                       style={{ width: '100%' }}
                     />
                   </label>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <label style={{ display: 'block' }}>
+                      <small>Position X <output>{((s.lineupIndividualSizes?.[i] as any)?.x ?? 0)}px</output></small>
+                      <input 
+                        type="range" 
+                        min={-400} 
+                        max={400} 
+                        step={5} 
+                        value={((s.lineupIndividualSizes?.[i] as any)?.x ?? 0)} 
+                        onChange={(e) => {
+                          const newSizes = [...(s.lineupIndividualSizes ?? [])];
+                          newSizes[i] = { ...(newSizes[i] as any ?? {}), x: Number(e.target.value) };
+                          set({ lineupIndividualSizes: newSizes });
+                        }} 
+                        style={{ width: '100%' }}
+                      />
+                    </label>
+                    
+                    <label style={{ display: 'block' }}>
+                      <small>Position Y <output>{(s.lineupIndividualOffsets?.[i] ?? 0)}px</output></small>
+                      <input 
+                        type="range" 
+                        min={-200} 
+                        max={200} 
+                        step={5} 
+                        value={s.lineupIndividualOffsets?.[i] ?? 0} 
+                        onChange={(e) => {
+                          const newOffsets = [...(s.lineupIndividualOffsets ?? [])];
+                          newOffsets[i] = Number(e.target.value);
+                          set({ lineupIndividualOffsets: newOffsets });
+                        }} 
+                        style={{ width: '100%' }}
+                      />
+                    </label>
+                  </div>
                 </div>
               ))}
             </div>
