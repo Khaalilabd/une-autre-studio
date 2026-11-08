@@ -518,6 +518,30 @@ function LogoBadge({ cx, cy, r, text, fg, on, rotationSpeed = 24, fontFamily = F
 
 /** Headline = the line-up joined by "+", on one row when it fits, else two. Or each artist on its own line. */
 function headline(content: EventContent, maxW: number, max: number, titleFont = "'General Sans'", layout: 'joined' | 'stacked' = 'joined') {
+  // Si lineupText est défini, utiliser chaque ligne comme un artiste
+  if (content.lineupText && content.lineupText.trim()) {
+    const lines = content.lineupText.split('\n').filter(line => line.trim());
+    const font = { family: titleFont, size: max, weight: 700, tracking: -max * 0.03 };
+    
+    // Mode stacked: chaque ligne sur sa propre ligne
+    if (layout === 'stacked') {
+      return {
+        rows: lines,
+        size: max,
+        sizes: lines.map(line => fitMeasured(line, maxW, font))
+      };
+    }
+    
+    // Mode joined: joindre avec "+"
+    const one = lines.join(' + ');
+    const s1 = fitMeasured(one, maxW, font);
+    if (s1 >= max * 0.7 || lines.length < 2) return { rows: [one], size: s1, sizes: [s1] };
+    const h = Math.ceil(lines.length / 2);
+    const rows = [lines.slice(0, h).join(' + '), '+ ' + lines.slice(h).join(' + ')];
+    const sizes = rows.map((r) => fitMeasured(r, maxW, font));
+    return { rows, size: Math.min(...sizes), sizes };
+  }
+  
   const names = content.lineup.map((a) => a.name.toUpperCase()).filter(Boolean);
   const font = { family: titleFont, size: max, weight: 700, tracking: -max * 0.03 };
   
@@ -680,19 +704,26 @@ export function InfoLayer({ st, content, settings, fg, accent, shadow, sq, on, s
     );
   })();
 
-  const hl = headline(content, W - M * 2, sq ? 84 : 108, titleFont, settings.lineupLayout ?? 'joined');
+  const hl = headline(content, W - M * 2, sq ? 84 : 108, titleFont, content.lineupStacked ? 'stacked' : 'joined');
   const hy = sq ? 540 : 790;
   const lineSpacing = settings.lineupLineSpacing ?? (sq ? 80 : 100);
-  const infoY = hy + (hl.rows.length - 1) * lineSpacing + (sq ? 62 : 84);
+  
+  // Prepare lineup text for hand-drawn style
+  const lineupLayout = content.lineupStacked ? 'stacked' : 'joined';
+  const lineupRows = content.lineupText && content.lineupText.trim()
+    ? content.lineupText.split('\n').filter(line => line.trim())
+    : (lineupLayout === 'stacked' 
+        ? content.lineup.map(a => a.name.toUpperCase())
+        : [content.lineup.map(a => a.name.toUpperCase()).join(' + ')]);
+  
+  const lineupRowCount = lineupLayout === 'stacked' ? lineupRows.length : hl.rows.length;
+  const infoY = hy + (lineupRowCount - 1) * lineSpacing + (sq ? 62 : 84);
   const sig = lines(content.signature);
   const man = lines(content.manifesto);
   const big = sq ? 44 : 60;
   const mid = sq ? 26 : 34;
   const small = sq ? 17 : 22;
   const split = settings.infoLayout === 'split';
-
-  // Prepare lineup text for hand-drawn style
-  const lineupText = content.lineup.map(a => a.name.toUpperCase()).join(' + ');
 
   return (
     <g>
@@ -711,25 +742,33 @@ export function InfoLayer({ st, content, settings, fg, accent, shadow, sq, on, s
         <Glow glow={mix(fg, accent, 0.6)} sd={9} on={on}>
           <g transform={`translate(${textOffsetX} ${textOffsetY})`}>
             {/* Lineup */}
-            <HandLine 
-              text={lineupText} 
-              x={W / 2} 
-              y={hy + (sq ? 10 : 20)} 
-              cap={sq ? 74 : 98} 
-              maxW={W - M * 2} 
-              h={handStyle} 
-              color={fg} 
-              on={on} 
-              seed={100} 
-              dance={0.7} 
-            />
+            {lineupRows.map((rowText, i) => {
+              const baseCap = sq ? 74 : 98;
+              const customScale = settings.lineupCustomSizes?.[i] ?? 100;
+              const scaledCap = baseCap * (customScale / 100);
+              return (
+                <HandLine 
+                  key={i}
+                  text={rowText} 
+                  x={W / 2} 
+                  y={hy + (sq ? 10 : 20) + i * lineSpacing} 
+                  cap={scaledCap} 
+                  maxW={W - M * 2} 
+                  h={handStyle} 
+                  color={fg} 
+                  on={on} 
+                  seed={100 + i} 
+                  dance={0.7} 
+                />
+              );
+            })}
             {split ? (
               <>
                 {/* Date */}
                 <HandLine 
                   text={content.date} 
-                  x={M + 190} 
-                  y={infoY - 20} 
+                  x={M + 190 + (settings.dateX ?? 0)} 
+                  y={infoY - 20 + (settings.dateY ?? 0)} 
                   cap={sq ? 40 : 52} 
                   maxW={380} 
                   h={{ ...handStyle, weight: handStyle.weight * 1.1, bounce: handStyle.bounce * 0.6 }} 
@@ -756,8 +795,8 @@ export function InfoLayer({ st, content, settings, fg, accent, shadow, sq, on, s
                 {/* Venue */}
                 <HandLine 
                   text={content.venue} 
-                  x={W - M - 190} 
-                  y={infoY - big * 0.32 - 20} 
+                  x={W - M - 190 + (settings.venueX ?? 0)} 
+                  y={infoY - big * 0.32 - 20 + (settings.venueY ?? 0)} 
                   cap={sq ? 28 : 36} 
                   maxW={380} 
                   h={{ ...handStyle, weight: handStyle.weight * 1.1, bounce: handStyle.bounce * 0.6 }} 
@@ -770,8 +809,8 @@ export function InfoLayer({ st, content, settings, fg, accent, shadow, sq, on, s
                 {/* Pillars */}
                 <HandLine 
                   text={content.pillars} 
-                  x={W - M - 150} 
-                  y={infoY - big * 0.32 + mid * 1.05 - 20} 
+                  x={W - M - 150 + (settings.pillarsX ?? 0)} 
+                  y={infoY - big * 0.32 + mid * 1.05 - 20 + (settings.pillarsY ?? 0)} 
                   cap={sq ? 24 : 28} 
                   maxW={380} 
                   h={{ ...handStyle, weight: handStyle.weight * 1.1, bounce: handStyle.bounce * 0.6 }} 
@@ -787,8 +826,8 @@ export function InfoLayer({ st, content, settings, fg, accent, shadow, sq, on, s
                 {/* Date — Venue */}
                 <HandLine 
                   text={`${content.date} — ${content.venue}`} 
-                  x={W / 2} 
-                  y={infoY - 20} 
+                  x={W / 2 + (settings.dateX ?? 0)} 
+                  y={infoY - 20 + (settings.dateY ?? 0)} 
                   cap={sq ? 30 : 38} 
                   maxW={W - M * 2} 
                   h={{ ...handStyle, weight: handStyle.weight * 1.1, bounce: handStyle.bounce * 0.6 }} 
@@ -800,8 +839,8 @@ export function InfoLayer({ st, content, settings, fg, accent, shadow, sq, on, s
                 {/* Edition · Pillars */}
                 <HandLine 
                   text={`${content.edition} · ${content.pillars}`} 
-                  x={W / 2} 
-                  y={infoY + mid * 1.2 - 20} 
+                  x={W / 2 + (settings.pillarsX ?? 0)} 
+                  y={infoY + mid * 1.2 - 20 + (settings.pillarsY ?? 0)} 
                   cap={sq ? 20 : 26} 
                   maxW={W - M * 2} 
                   h={{ ...handStyle, weight: handStyle.weight * 1.1, bounce: handStyle.bounce * 0.6 }} 
@@ -818,7 +857,9 @@ export function InfoLayer({ st, content, settings, fg, accent, shadow, sq, on, s
         // Standard font-based text
         <g filter={`url(#${id})`} fill={fg} transform={`translate(${textOffsetX} ${textOffsetY})`}>
           {hl.rows.map((r, i) => {
-            const individualSize = settings.lineupIndividualSizes?.[i] ?? hl.sizes![i];
+            const baseSize = settings.lineupIndividualSizes?.[i] ?? hl.sizes![i];
+            const customScale = settings.lineupCustomSizes?.[i] ?? 100;
+            const individualSize = baseSize * (customScale / 100);
             const individualOffset = settings.lineupIndividualOffsets?.[i] ?? 0;
             return (
               <text 
@@ -837,30 +878,30 @@ export function InfoLayer({ st, content, settings, fg, accent, shadow, sq, on, s
           })}
           {split ? (
             <>
-              <text x={M} y={infoY} fontFamily={titleFont} fontWeight={700} fontSize={fitMeasured(content.date, 380, { family: titleFont, size: big, weight: 700, tracking: -big * 0.02 })} letterSpacing={-big * 0.02}>
+              <text x={M + (settings.dateX ?? 0)} y={infoY + (settings.dateY ?? 0)} fontFamily={titleFont} fontWeight={700} fontSize={fitMeasured(content.date, 380, { family: titleFont, size: big, weight: 700, tracking: -big * 0.02 })} letterSpacing={-big * 0.02}>
                 {content.date}
               </text>
               <text x={M} y={infoY + mid * 1.25} fontFamily={titleFont} fontWeight={600} fontSize={mid * 0.8} letterSpacing={1}>
                 {content.edition}
               </text>
-              <text x={W - M} y={infoY - big * 0.32} textAnchor="end" fontFamily={titleFont} fontWeight={700} fontSize={fitMeasured(content.venue, 380, { family: titleFont, size: mid, weight: 700 })}>
+              <text x={W - M + (settings.venueX ?? 0)} y={infoY - big * 0.32 + (settings.venueY ?? 0)} textAnchor="end" fontFamily={titleFont} fontWeight={700} fontSize={fitMeasured(content.venue, 380, { family: titleFont, size: mid, weight: 700 })}>
                 {content.venue}
               </text>
-              <text x={W - M} y={infoY - big * 0.32 + mid * 1.05} textAnchor="end" fontFamily={titleFont} fontWeight={400} fontSize={fitMeasured(content.pillars, 380, { family: titleFont, size: mid * 0.8, weight: 400 })}>
+              <text x={W - M + (settings.pillarsX ?? 0)} y={infoY - big * 0.32 + mid * 1.05 + (settings.pillarsY ?? 0)} textAnchor="end" fontFamily={titleFont} fontWeight={400} fontSize={fitMeasured(content.pillars, 380, { family: titleFont, size: mid * 0.8, weight: 400 })}>
                 {content.pillars}
               </text>
               {sig[0] && (
-                <text x={W - M} y={infoY - big * 0.32 + mid * 2.1} textAnchor="end" fontFamily={titleFont} fontWeight={600} fontSize={fitMeasured(sig.join(' · '), 380, { family: titleFont, size: small, weight: 600 })}>
+                <text x={W - M + (settings.signatureX ?? 0)} y={infoY - big * 0.32 + mid * 2.1 + (settings.signatureY ?? 0)} textAnchor="end" fontFamily={titleFont} fontWeight={600} fontSize={fitMeasured(sig.join(' · '), 380, { family: titleFont, size: small, weight: 600 })}>
                   {sig.join(' · ')}
                 </text>
               )}
             </>
           ) : (
             <>
-              <text x={W / 2} y={infoY} textAnchor="middle" fontFamily={titleFont} fontWeight={700} fontSize={fitMeasured(`${content.date} — ${content.venue}`, W - M * 2, { family: titleFont, size: mid * 1.1, weight: 700 })}>
+              <text x={W / 2 + (settings.dateX ?? 0)} y={infoY + (settings.dateY ?? 0)} textAnchor="middle" fontFamily={titleFont} fontWeight={700} fontSize={fitMeasured(`${content.date} — ${content.venue}`, W - M * 2, { family: titleFont, size: mid * 1.1, weight: 700 })}>
                 {content.date} — {content.venue}
               </text>
-              <text x={W / 2} y={infoY + mid * 1.2} textAnchor="middle" fontFamily={titleFont} fontWeight={400} fontSize={mid * 0.75} letterSpacing={2}>
+              <text x={W / 2 + (settings.pillarsX ?? 0)} y={infoY + mid * 1.2 + (settings.pillarsY ?? 0)} textAnchor="middle" fontFamily={titleFont} fontWeight={400} fontSize={mid * 0.75} letterSpacing={2}>
                 {content.edition} · {content.pillars}
               </text>
             </>

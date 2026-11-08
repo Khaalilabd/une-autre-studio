@@ -21,6 +21,10 @@ export const DEFAULT_CONTENT: EventContent = {
     { id: 'b', name: 'FIRAS KOBBI · LUIGI · BOUAZIZ', detail: 'NOUVELLE GÉNÉRATION · EXEMPLES DE DJ' },
     { id: 'c', name: 'UNE AUTRE ? CREW', detail: 'LE CREW · DJ SET + GUITARE + VOIX · SHOW LIVE' },
   ],
+  // Texte brut du lineup pour affichage simple ligne par ligne
+  lineupText: '',
+  // Mode d'affichage par défaut : false = joints avec +
+  lineupStacked: false,
   mentions: '',
   coords: '',
 };

@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import type { ConceptDef, CreativeSettings, LineupSlot } from '../data/types';
+import type { ConceptDef, CreativeSettings } from '../data/types';
 import { useStudio } from '../state/store';
 
 function Field({ label, value, onChange, multiline, placeholder, hint }: { label: string; value: string; onChange: (v: string) => void; multiline?: boolean; placeholder?: string; hint?: string }) {
@@ -18,14 +18,6 @@ function Field({ label, value, onChange, multiline, placeholder, hint }: { label
 
 export function ContentEditor() {
   const { content, setContent, resetContent } = useStudio();
-  const setSlot = (id: string, patch: Partial<LineupSlot>) => setContent({ lineup: content.lineup.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
-  const move = (i: number, d: -1 | 1) => {
-    const next = [...content.lineup];
-    const j = i + d;
-    if (j < 0 || j >= next.length) return;
-    [next[i], next[j]] = [next[j], next[i]];
-    setContent({ lineup: next });
-  };
   return (
     <div className="panel-section">
       <p className="hint">Ces champs sont partagés par toutes les pistes et tous les formats.</p>
@@ -46,33 +38,36 @@ export function ContentEditor() {
       <Field label="Date" value={content.date} onChange={(date) => setContent({ date })} hint="Le premier mot (le jour) est mis en exergue sur certaines affiches." />
       <Field label="Horaires" value={content.hours} onChange={(hours) => setContent({ hours })} hint="Exemple à remplacer par les vrais horaires." />
       <Field label="Titre de la programmation" value={content.lineupTitle} onChange={(lineupTitle) => setContent({ lineupTitle })} />
-      <fieldset className="lineup-editor">
-        <legend>Artistes</legend>
-        {content.lineup.map((s, i) => (
-          <div className="slot" key={s.id}>
-            <input aria-label={`Artiste ${i + 1}`} value={s.name} onChange={(e) => setSlot(s.id, { name: e.target.value })} />
-            <input aria-label={`Détail ${i + 1}`} value={s.detail} placeholder="B2B …, CLOSING…" onChange={(e) => setSlot(s.id, { detail: e.target.value })} />
-            <div className="slot-actions">
-              <button className="icon" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Monter">
-                ↑
-              </button>
-              <button className="icon" onClick={() => move(i, 1)} disabled={i === content.lineup.length - 1} aria-label="Descendre">
-                ↓
-              </button>
-              <button className="icon" onClick={() => setContent({ lineup: content.lineup.filter((x) => x.id !== s.id) })} disabled={content.lineup.length <= 1} aria-label="Supprimer">
-                ✕
-              </button>
-            </div>
-          </div>
-        ))}
-        <button
-          className="btn small"
-          disabled={content.lineup.length >= 4}
-          onClick={() => setContent({ lineup: [...content.lineup, { id: Math.random().toString(36).slice(2, 8), name: 'ARTISTE', detail: '' }] })}
-        >
-          + Ajouter un artiste {content.lineup.length >= 4 && '(4 max.)'}
-        </button>
-      </fieldset>
+      <Field 
+        label="Artistes / DJs (un par ligne)" 
+        value={content.lineupText ?? ''} 
+        onChange={(lineupText) => setContent({ lineupText })} 
+        multiline 
+        placeholder="Écrivez chaque artiste sur une ligne :&#10;Feki Station&#10;Crew&#10;Firas Kobbi"
+        hint="✨ Chaque ligne = un artiste affiché sur l'affiche. Simple et direct !"
+      />
+      <div className="field">
+        <span>Mode d'affichage des artistes</span>
+        <div className="segmented" role="radiogroup" aria-label="Mode d'affichage">
+          <button 
+            role="radio" 
+            aria-checked={!content.lineupStacked} 
+            className={!content.lineupStacked ? 'on' : ''} 
+            onClick={() => setContent({ lineupStacked: false })}
+          >
+            Avec + (Artiste 1 + Artiste 2)
+          </button>
+          <button 
+            role="radio" 
+            aria-checked={!!content.lineupStacked} 
+            className={content.lineupStacked ? 'on' : ''} 
+            onClick={() => setContent({ lineupStacked: true })}
+          >
+            Empilé (lignes séparées)
+          </button>
+        </div>
+        <small>Choisissez comment afficher vos artistes : joints avec "+" ou chacun sur sa ligne.</small>
+      </div>
       <Field label="Mentions secondaires" value={content.mentions} onChange={(mentions) => setContent({ mentions })} placeholder="Facultatif — ex. entrée, partenaires…" />
       <Field label="Coordonnées / annotation" value={content.coords} onChange={(coords) => setContent({ coords })} placeholder="Facultatif — ex. coordonnées GPS du lieu" />
       <button className="btn ghost small" onClick={resetContent}>
@@ -423,6 +418,45 @@ export function CreativeControls({ def }: { def: ConceptDef }) {
           La moitié arrière passe derrière (estompée), la moitié avant devant (lumineuse).
         </small>
       </div>
+      
+      {content.lineupText && content.lineupText.trim() && content.lineupStacked && (() => {
+        const lines = content.lineupText.split('\n').filter(l => l.trim());
+        if (lines.length === 0) return null;
+        return (
+          <div className="field" style={{ borderTop: '2px solid #e5e7eb', paddingTop: '16px', marginTop: '16px' }}>
+            <span style={{ fontSize: '15px', fontWeight: 600 }}>🎚️ Taille de chaque ligne du lineup</span>
+            <small style={{ display: 'block', marginBottom: '12px', marginTop: '6px', color: '#6b7280' }}>
+              ✅ {lines.length} {lines.length === 1 ? 'ligne détectée' : 'lignes détectées'}. Ajustez la taille de chaque ligne individuellement (100% = taille automatique).
+            </small>
+            <div style={{ display: 'grid', gap: '12px' }}>
+              {lines.map((line, i) => (
+                <div key={i} style={{ padding: '10px', backgroundColor: '#f9fafb', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+                  <strong style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: '#374151' }}>
+                    📌 Ligne {i + 1}: {line.substring(0, 30)}{line.length > 30 ? '...' : ''}
+                  </strong>
+                  <label style={{ display: 'block' }}>
+                    <small>Taille <output>{(s.lineupCustomSizes?.[i] ?? 100).toFixed(0)}%</output></small>
+                    <input 
+                      type="range" 
+                      min={30} 
+                      max={150} 
+                      step={5} 
+                      value={s.lineupCustomSizes?.[i] ?? 100} 
+                      onChange={(e) => {
+                        const newSizes = { ...(s.lineupCustomSizes ?? {}) };
+                        newSizes[i] = Number(e.target.value);
+                        set({ lineupCustomSizes: newSizes });
+                      }} 
+                      style={{ width: '100%' }}
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+      
       {def.id === 'rubanrouge' && (
         <>
           <label className="field">
@@ -788,6 +822,100 @@ export function CreativeControls({ def }: { def: ConceptDef }) {
         {photoError && <small className="error">{photoError}</small>}
         {storageWarning && <small className="error">Photo trop lourde pour être mémorisée : elle sera perdue au rechargement.</small>}
       </div>
+      
+      <div className="field" style={{ borderTop: '2px solid #e5e7eb', paddingTop: '20px', marginTop: '20px' }}>
+        <span style={{ fontSize: '16px', fontWeight: 600, color: '#111827' }}>📍 Position des éléments de texte</span>
+        <small style={{ display: 'block', marginTop: '8px', marginBottom: '16px', lineHeight: '1.4', color: '#6b7280' }}>
+          Déplacez individuellement chaque élément : Lieu, Date, Horaires, Piliers, Mentions, Signature.
+        </small>
+        
+        <div style={{ display: 'grid', gap: '16px' }}>
+          <div style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '6px' }}>
+            <strong style={{ display: 'block', marginBottom: '8px', color: '#374151' }}>📍 Lieu</strong>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <label style={{ flex: 1 }}>
+                <small>X <output>{s.venueX ?? 0}px</output></small>
+                <input type="range" min={-300} max={300} step={5} value={s.venueX ?? 0} onChange={(e) => set({ venueX: Number(e.target.value) })} />
+              </label>
+              <label style={{ flex: 1 }}>
+                <small>Y <output>{s.venueY ?? 0}px</output></small>
+                <input type="range" min={-300} max={300} step={5} value={s.venueY ?? 0} onChange={(e) => set({ venueY: Number(e.target.value) })} />
+              </label>
+            </div>
+          </div>
+          
+          <div style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '6px' }}>
+            <strong style={{ display: 'block', marginBottom: '8px', color: '#374151' }}>📅 Date</strong>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <label style={{ flex: 1 }}>
+                <small>X <output>{s.dateX ?? 0}px</output></small>
+                <input type="range" min={-300} max={300} step={5} value={s.dateX ?? 0} onChange={(e) => set({ dateX: Number(e.target.value) })} />
+              </label>
+              <label style={{ flex: 1 }}>
+                <small>Y <output>{s.dateY ?? 0}px</output></small>
+                <input type="range" min={-300} max={300} step={5} value={s.dateY ?? 0} onChange={(e) => set({ dateY: Number(e.target.value) })} />
+              </label>
+            </div>
+          </div>
+          
+          <div style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '6px' }}>
+            <strong style={{ display: 'block', marginBottom: '8px', color: '#374151' }}>⏰ Horaires</strong>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <label style={{ flex: 1 }}>
+                <small>X <output>{s.hoursX ?? 0}px</output></small>
+                <input type="range" min={-300} max={300} step={5} value={s.hoursX ?? 0} onChange={(e) => set({ hoursX: Number(e.target.value) })} />
+              </label>
+              <label style={{ flex: 1 }}>
+                <small>Y <output>{s.hoursY ?? 0}px</output></small>
+                <input type="range" min={-300} max={300} step={5} value={s.hoursY ?? 0} onChange={(e) => set({ hoursY: Number(e.target.value) })} />
+              </label>
+            </div>
+          </div>
+          
+          <div style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '6px' }}>
+            <strong style={{ display: 'block', marginBottom: '8px', color: '#374151' }}>🎯 Piliers</strong>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <label style={{ flex: 1 }}>
+                <small>X <output>{s.pillarsX ?? 0}px</output></small>
+                <input type="range" min={-300} max={300} step={5} value={s.pillarsX ?? 0} onChange={(e) => set({ pillarsX: Number(e.target.value) })} />
+              </label>
+              <label style={{ flex: 1 }}>
+                <small>Y <output>{s.pillarsY ?? 0}px</output></small>
+                <input type="range" min={-300} max={300} step={5} value={s.pillarsY ?? 0} onChange={(e) => set({ pillarsY: Number(e.target.value) })} />
+              </label>
+            </div>
+          </div>
+          
+          <div style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '6px' }}>
+            <strong style={{ display: 'block', marginBottom: '8px', color: '#374151' }}>📝 Mentions</strong>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <label style={{ flex: 1 }}>
+                <small>X <output>{s.mentionsX ?? 0}px</output></small>
+                <input type="range" min={-300} max={300} step={5} value={s.mentionsX ?? 0} onChange={(e) => set({ mentionsX: Number(e.target.value) })} />
+              </label>
+              <label style={{ flex: 1 }}>
+                <small>Y <output>{s.mentionsY ?? 0}px</output></small>
+                <input type="range" min={-300} max={300} step={5} value={s.mentionsY ?? 0} onChange={(e) => set({ mentionsY: Number(e.target.value) })} />
+              </label>
+            </div>
+          </div>
+          
+          <div style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '6px' }}>
+            <strong style={{ display: 'block', marginBottom: '8px', color: '#374151' }}>✍️ Signature</strong>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <label style={{ flex: 1 }}>
+                <small>X <output>{s.signatureX ?? 0}px</output></small>
+                <input type="range" min={-300} max={300} step={5} value={s.signatureX ?? 0} onChange={(e) => set({ signatureX: Number(e.target.value) })} />
+              </label>
+              <label style={{ flex: 1 }}>
+                <small>Y <output>{s.signatureY ?? 0}px</output></small>
+                <input type="range" min={-300} max={300} step={5} value={s.signatureY ?? 0} onChange={(e) => set({ signatureY: Number(e.target.value) })} />
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      
       <button className="btn ghost small" onClick={() => resetConcept(def.id)}>
         Réinitialiser les réglages de ce concept
       </button>

@@ -87,6 +87,10 @@ export interface EventContent {
   hours: string;
   lineupTitle: string;
   lineup: LineupSlot[];
+  /** Texte brut du lineup (chaque ligne = un artiste), utilisé si non vide */
+  lineupText?: string;
+  /** Mode d'affichage : false = joints avec +, true = empilés ligne par ligne */
+  lineupStacked?: boolean;
   mentions: string;
   coords: string;
 }
@@ -150,6 +154,20 @@ export interface CreativeSettings {
   lineupLineSpacing?: number;  // Espacement entre les lignes en mode stacked
   lineupIndividualSizes?: number[];  // Taille de chaque ligne (optionnel)
   lineupIndividualOffsets?: number[];  // Décalage Y de chaque ligne (optionnel)
+  lineupCustomSizes?: { [index: number]: number };  // Tailles personnalisées par ligne (en % de la taille de base)
+  // Individual text element positions
+  venueX?: number;
+  venueY?: number;
+  dateX?: number;
+  dateY?: number;
+  hoursX?: number;
+  hoursY?: number;
+  pillarsX?: number;
+  pillarsY?: number;
+  mentionsX?: number;
+  mentionsY?: number;
+  signatureX?: number;
+  signatureY?: number;
 }
 
 export interface Colors {
